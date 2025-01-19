@@ -1,6 +1,6 @@
-use std::{cell::RefCell, cmp::min, collections::HashMap, iter::Map, ops::Deref, rc::Rc};
+use std::collections::{BinaryHeap, HashMap};
 
-use chrono::{Date, DateTime, TimeZone, Utc};
+use chrono::{Date, DateTime, Duration, TimeZone, Utc};
 use ustr::{ustr, Ustr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -8,6 +8,14 @@ struct VehicleID(Ustr);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct StationID(Ustr);
+
+#[derive(Debug, Clone)]
+struct Station {
+    id: StationID,
+    max_change_time: Duration,
+    vehicle_connections: Vec<VehicleConnection>,
+    walk_connections: Vec<WalkConnection>,
+}
 
 #[derive(Debug, Clone)]
 struct VehicleConnection {
@@ -24,34 +32,65 @@ struct WalkConnection {
 }
 
 #[derive(Debug, Clone)]
-struct Station {
-    id: StationID,
-    vehicle_connections: Vec<VehicleConnection>,
-    walk_connections: Vec<WalkConnection>,
+struct ArrivalOrigin<'a> {
+    vehicle: Option<VehicleID>,
+    previous_station: &'a Station,
 }
 
 #[derive(Debug, Clone)]
-struct ArrivalOrigin {
-    vehicle: VehicleID,
-    previous_station: StationID,
-}
-
-#[derive(Debug, Clone)]
-struct ArrivalInfo {
+struct ArrivalInfo<'a> {
     time: DateTime<Utc>,
-    origin: Option<ArrivalOrigin>,
+    origin: Option<ArrivalOrigin<'a>>,
 }
 
 #[derive(Debug, Clone)]
-struct StationState {
-    earliest_arrival: DateTime<Utc>,
-    arrivals: Vec<ArrivalInfo>,
+struct StationState<'a> {
+    arrivals: Vec<ArrivalInfo<'a>>,
+    earliest_arrival: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone)]
-struct AnalysisState {
-    station_states: HashMap<StationID, StationState>,
-    queue: priority_queue::PriorityQueue<StationID, DateTime<Utc>>,
+struct AnalysisState<'a> {
+    stations_by_id: &'a HashMap<StationID, Box<Station>>,
+    station_states: HashMap<StationID, StationState<'a>>,
+    queue: BinaryHeap<ArrivalEvent<'a>>,
+}
+
+#[derive(Clone)]
+struct ArrivalEvent<'a> {
+    time: DateTime<Utc>,
+    station: &'a Station,
+    origin: Option<ArrivalOrigin<'a>>,
+}
+
+impl PartialEq for ArrivalEvent<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.time == other.time
+    }
+}
+
+impl PartialOrd for ArrivalEvent<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.time.cmp(&other.time))
+    }
+}
+
+impl Eq for ArrivalEvent<'_> {}
+
+impl Ord for ArrivalEvent<'_> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.time.cmp(&other.time)
+    }
+}
+
+impl std::fmt::Debug for ArrivalEvent<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Event")
+            .field("station", &self.station.id)
+            .field("time", &self.time)
+            .field("origin", &self.origin)
+            .finish()
+    }
 }
 
 fn find_next_departure_time(station: &Station, time: DateTime<Utc>) -> Option<DateTime<Utc>> {
@@ -71,23 +110,109 @@ fn find_next_departure_time(station: &Station, time: DateTime<Utc>) -> Option<Da
     None
 }
 
-fn arrive_at(station: &Station, info: ArrivalInfo, state: &mut AnalysisState) {
+fn find_first_departure_index(station: &Station, time: DateTime<Utc>) -> Option<usize> {
+    let next_vehicle_connection = station
+        .vehicle_connections
+        .binary_search_by(|conn| return conn.departure.cmp(&time));
+
+    match next_vehicle_connection {
+        Ok(mut index) => {
+            while index > 0 && station.vehicle_connections[index - 1].departure == time {
+                index -= 1;
+            }
+            Some(index)
+        }
+        Err(index) => {
+            if index >= station.vehicle_connections.len() {
+                None
+            } else {
+                Some(index)
+            }
+        }
+    }
+}
+
+fn find_next_departures(station: &Station, time: DateTime<Utc>) -> &[VehicleConnection] {
+    let next_vehicle_connection = station.vehicle_connections.binary_search_by(|conn| {
+        return conn.departure.cmp(&time);
+    });
+
+    let found_index = match next_vehicle_connection {
+        Ok(index) => index,
+        Err(index) => index,
+    };
+    if found_index >= station.vehicle_connections.len() {
+        return &[];
+    }
+    let mut first_index = found_index;
+    while first_index > 0 && station.vehicle_connections[first_index - 1].departure == time {
+        first_index -= 1;
+    }
+    let mut last_index = found_index;
+    while last_index < station.vehicle_connections.len()
+        && station.vehicle_connections[last_index].departure == time
+    {
+        last_index += 1;
+    }
+    &station.vehicle_connections[first_index..=last_index]
+}
+
+fn find_potentially_useful_vehicle_connections<'a>(
+    station: &'a Station,
+    arrival_time: DateTime<Utc>,
+    stations_by_id: &HashMap<StationID, Box<Station>>,
+) -> Vec<&'a VehicleConnection> {
+    let mut next_stations: HashMap<StationID, Vec<&VehicleConnection>> = HashMap::new();
+    let mut result = vec![];
+    for conn in &station.vehicle_connections {
+        if conn.departure < arrival_time {
+            continue;
+        }
+        let next_station = stations_by_id.get(&conn.next_station).unwrap();
+        let connections_to_same_station = next_stations.entry(conn.next_station).or_default();
+        let has_better_alternative = connections_to_same_station
+            .iter()
+            .any(|other_conn| other_conn.arrival + next_station.max_change_time < conn.arrival);
+        if !has_better_alternative {
+            connections_to_same_station.push(conn);
+            result.push(conn);
+        }
+    }
+    result
+}
+
+fn arrive_at<'a>(station: &'a Station, info: ArrivalInfo<'a>, state: &mut AnalysisState<'a>) {
+    println!("Arrive at {:?} at {:?}", station.id.0.as_str(), info.time);
     let station_state = state
         .station_states
         .entry(station.id)
         .or_insert_with(|| StationState {
-            earliest_arrival: DateTime::<Utc>::MAX_UTC,
             arrivals: vec![],
+            earliest_arrival: None,
         });
 
-    if info.time < station_state.earliest_arrival {
-        station_state.earliest_arrival = info.time;
-        if let Some(next_departure_time) =
-            find_next_departure_time(station, station_state.earliest_arrival)
-        {
-            state.queue.push(station.id, next_departure_time);
-        }
+    if station_state
+        .earliest_arrival
+        .unwrap_or(DateTime::<Utc>::MAX_UTC)
+        < info.time
+    {
+        return;
     }
+    station_state.earliest_arrival = Some(info.time);
+
+    let connections =
+        find_potentially_useful_vehicle_connections(station, info.time, &state.stations_by_id);
+    for conn in connections {
+        state.queue.push(ArrivalEvent {
+            time: conn.arrival,
+            station: state.stations_by_id.get(&conn.next_station).unwrap(),
+            origin: Some(ArrivalOrigin {
+                vehicle: Some(conn.vehicle),
+                previous_station: station,
+            }),
+        });
+    }
+
     station_state.arrivals.push(info);
 }
 
@@ -97,12 +222,14 @@ fn analyse_single_start(
     stations_by_id: &HashMap<StationID, Box<Station>>,
 ) {
     let mut state = AnalysisState {
+        stations_by_id,
         station_states: HashMap::new(),
-        queue: priority_queue::PriorityQueue::new(),
+        queue: BinaryHeap::new(),
     };
 
+    let start_station = stations_by_id.get(&start_station_id).unwrap();
     arrive_at(
-        stations_by_id.get(&start_station_id).unwrap(),
+        start_station,
         ArrivalInfo {
             time: start_time,
             origin: None,
@@ -110,7 +237,16 @@ fn analyse_single_start(
         &mut state,
     );
 
-    println!("{:#?}", state);
+    while let Some(event) = state.queue.pop() {
+        arrive_at(
+            event.station,
+            ArrivalInfo {
+                time: event.time,
+                origin: event.origin,
+            },
+            &mut state,
+        );
+    }
 }
 
 fn main() {
@@ -121,11 +257,13 @@ fn main() {
         id: hennigsdorf_id,
         vehicle_connections: vec![],
         walk_connections: vec![],
+        max_change_time: Duration::minutes(5),
     });
     let heiligensee = Box::new(Station {
         id: heiligensee_id,
         vehicle_connections: vec![],
         walk_connections: vec![],
+        max_change_time: Duration::minutes(2),
     });
 
     let mut stations_by_id = HashMap::new();
