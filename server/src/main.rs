@@ -1,7 +1,26 @@
+use anyhow::Result;
+use chrono::{DateTime, Duration, TimeZone, Utc};
+use clap::{Parser, Subcommand};
 use std::collections::{BinaryHeap, HashMap};
-
-use chrono::{Date, DateTime, Duration, TimeZone, Utc};
 use ustr::{ustr, Ustr};
+
+mod prepare_gtfs;
+
+#[derive(Parser, Debug)]
+#[command(name = "trip-atlas")]
+struct CLI {
+    #[command(subcommand)]
+    command: CLICommand,
+}
+
+#[derive(Subcommand, Debug)]
+enum CLICommand {
+    TestAnalysis,
+    PrepareGTFS {
+        #[arg(long)]
+        gtfs_path: String,
+    },
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct VehicleID(Ustr);
@@ -14,7 +33,6 @@ struct Station {
     id: StationID,
     max_change_time: Duration,
     vehicle_connections: Vec<VehicleConnection>,
-    walk_connections: Vec<WalkConnection>,
 }
 
 #[derive(Debug, Clone)]
@@ -26,21 +44,15 @@ struct VehicleConnection {
 }
 
 #[derive(Debug, Clone)]
-struct WalkConnection {
-    next_station: StationID,
-    duration: chrono::Duration,
-}
-
-#[derive(Debug, Clone)]
 struct ArrivalOrigin<'a> {
-    vehicle: Option<VehicleID>,
-    previous_station: &'a Station,
+    _vehicle: Option<VehicleID>,
+    _previous_station: &'a Station,
 }
 
 #[derive(Debug, Clone)]
 struct ArrivalInfo<'a> {
     time: DateTime<Utc>,
-    origin: Option<ArrivalOrigin<'a>>,
+    _origin: Option<ArrivalOrigin<'a>>,
 }
 
 #[derive(Debug, Clone)]
@@ -93,7 +105,7 @@ impl std::fmt::Debug for ArrivalEvent<'_> {
     }
 }
 
-fn find_next_departure_time(station: &Station, time: DateTime<Utc>) -> Option<DateTime<Utc>> {
+fn _find_next_departure_time(station: &Station, time: DateTime<Utc>) -> Option<DateTime<Utc>> {
     // Find next connection from station:
     let next_vehicle_connection = station
         .vehicle_connections
@@ -110,7 +122,7 @@ fn find_next_departure_time(station: &Station, time: DateTime<Utc>) -> Option<Da
     None
 }
 
-fn find_first_departure_index(station: &Station, time: DateTime<Utc>) -> Option<usize> {
+fn _find_first_departure_index(station: &Station, time: DateTime<Utc>) -> Option<usize> {
     let next_vehicle_connection = station
         .vehicle_connections
         .binary_search_by(|conn| return conn.departure.cmp(&time));
@@ -132,7 +144,7 @@ fn find_first_departure_index(station: &Station, time: DateTime<Utc>) -> Option<
     }
 }
 
-fn find_next_departures(station: &Station, time: DateTime<Utc>) -> &[VehicleConnection] {
+fn _find_next_departures(station: &Station, time: DateTime<Utc>) -> &[VehicleConnection] {
     let next_vehicle_connection = station.vehicle_connections.binary_search_by(|conn| {
         return conn.departure.cmp(&time);
     });
@@ -157,7 +169,7 @@ fn find_next_departures(station: &Station, time: DateTime<Utc>) -> &[VehicleConn
     &station.vehicle_connections[first_index..=last_index]
 }
 
-fn find_potentially_useful_vehicle_connections<'a>(
+fn _find_potentially_useful_vehicle_connections<'a>(
     station: &'a Station,
     arrival_time: DateTime<Utc>,
     stations_by_id: &HashMap<StationID, Box<Station>>,
@@ -201,14 +213,14 @@ fn arrive_at<'a>(station: &'a Station, info: ArrivalInfo<'a>, state: &mut Analys
     station_state.earliest_arrival = Some(info.time);
 
     let connections =
-        find_potentially_useful_vehicle_connections(station, info.time, &state.stations_by_id);
+        _find_potentially_useful_vehicle_connections(station, info.time, &state.stations_by_id);
     for conn in connections {
         state.queue.push(ArrivalEvent {
             time: conn.arrival,
             station: state.stations_by_id.get(&conn.next_station).unwrap(),
             origin: Some(ArrivalOrigin {
-                vehicle: Some(conn.vehicle),
-                previous_station: station,
+                _vehicle: Some(conn.vehicle),
+                _previous_station: station,
             }),
         });
     }
@@ -232,7 +244,7 @@ fn analyse_single_start(
         start_station,
         ArrivalInfo {
             time: start_time,
-            origin: None,
+            _origin: None,
         },
         &mut state,
     );
@@ -242,27 +254,25 @@ fn analyse_single_start(
             event.station,
             ArrivalInfo {
                 time: event.time,
-                origin: event.origin,
+                _origin: event.origin,
             },
             &mut state,
         );
     }
 }
 
-fn main() {
+fn test_algorithm() {
     let hennigsdorf_id = StationID(ustr("Hennisdorf"));
     let heiligensee_id = StationID(ustr("Heiligensee"));
 
     let hennigsdorf = Box::new(Station {
         id: hennigsdorf_id,
         vehicle_connections: vec![],
-        walk_connections: vec![],
         max_change_time: Duration::minutes(5),
     });
     let heiligensee = Box::new(Station {
         id: heiligensee_id,
         vehicle_connections: vec![],
-        walk_connections: vec![],
         max_change_time: Duration::minutes(2),
     });
 
@@ -286,4 +296,56 @@ fn main() {
         Utc.with_ymd_and_hms(2025, 1, 12, 14, 0, 0).unwrap(),
         &stations_by_id,
     );
+}
+
+async fn test_analysis() -> Result<()> {
+    let database_url = "/home/jacques/Downloads/data_copy.db";
+    let pool: sqlx::Pool<sqlx::Sqlite> = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect_with(sqlx::sqlite::SqliteConnectOptions::new().filename(database_url))
+        .await?;
+
+    let station_rows = sqlx::query!("SELECT * FROM stations")
+        .fetch_all(&pool)
+        .await?;
+    let trip_rows = sqlx::query!("SELECT * FROM trips LIMIT 100000")
+        .fetch_all(&pool)
+        .await?;
+    let stop_rows = sqlx::query!("SELECT * FROM stops").fetch_all(&pool).await?;
+
+    let mut station_rows_by_id = HashMap::new();
+    for row in station_rows {
+        station_rows_by_id.insert(StationID(Ustr::from(&row.id)), row);
+    }
+
+    let trip_id = &trip_rows
+        .iter()
+        .find(|row| row.line_name == Some("Bus X36".into()))
+        .unwrap()
+        .trip_id;
+    println!("{:?}", trip_id);
+
+    let stops = stop_rows.iter().filter(|row| row.trip_id == *trip_id);
+    for stop in stops {
+        println!(
+            "{:?} {:?}",
+            stop.arrival_time,
+            station_rows_by_id
+                .get(&StationID(Ustr::from(&stop.id)))
+                .unwrap()
+                .name
+        );
+    }
+
+    test_algorithm();
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let cli = CLI::parse();
+    match cli.command {
+        CLICommand::TestAnalysis => test_analysis().await?,
+        CLICommand::PrepareGTFS { gtfs_path } => prepare_gtfs::prepare_gtfs(&gtfs_path).await?,
+    }
+    Ok(())
 }
