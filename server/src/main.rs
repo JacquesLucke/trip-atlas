@@ -1,7 +1,10 @@
 use anyhow::Result;
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use clap::{Parser, Subcommand};
-use std::collections::{BinaryHeap, HashMap};
+use std::{
+    collections::{BinaryHeap, HashMap},
+    path::Path,
+};
 use ustr::{ustr, Ustr};
 
 mod prepare_gtfs;
@@ -342,10 +345,14 @@ async fn test_analysis() -> Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    simple_logger::SimpleLogger::new().init()?;
+
     let cli = CLI::parse();
     match cli.command {
         CLICommand::TestAnalysis => test_analysis().await?,
-        CLICommand::PrepareGTFS { gtfs_path } => prepare_gtfs::prepare_gtfs(&gtfs_path).await?,
+        CLICommand::PrepareGTFS { gtfs_path } => {
+            prepare_gtfs::prepare_gtfs(Path::new(&gtfs_path)).await?
+        }
     }
     Ok(())
 }
