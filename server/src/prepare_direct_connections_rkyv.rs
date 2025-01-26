@@ -1,14 +1,33 @@
 use anyhow::Result;
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, io::Write, path::Path};
 
 use crate::prepare_gtfs_as_rkyv;
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
+#[rkyv(derive(Debug))]
+pub struct AllConnections {
+    pub stations: Vec<ConnectionsFromStation>,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone)]
+#[rkyv(derive(Debug))]
+pub struct ConnectionsFromStation {
+    pub connections: Vec<ConnectionToStation>,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Copy, Clone)]
+#[rkyv(derive(Debug))]
+pub struct ConnectionToStation {
+    pub to_station_i: u32,
+    pub duration: u32,
+}
 
 pub async fn prepare_direct_connections(gtfs_folder_path: &Path) -> Result<()> {
     let src_data = prepare_gtfs_as_rkyv::load_gtfs_folder_rkyv(gtfs_folder_path).await?;
 
     let mut index_by_stop_id = HashMap::new();
     for (i, stop) in src_data.rkyv_data.stops.iter().enumerate() {
-        index_by_stop_id.insert(stop.id.as_str(), i);
+        index_by_stop_id.insert(stop.id.as_str(), i as u32);
     }
 
     let mut stops_by_trip = HashMap::new();
@@ -47,13 +66,29 @@ pub async fn prepare_direct_connections(gtfs_folder_path: &Path) -> Result<()> {
         }
     }
 
-    let max_item = shortest_durations.iter().max_by_key(|item| item.1).unwrap();
-    println!(
-        "{:?} -> {:?}: {:?}s",
-        src_data.rkyv_data.stops[*max_item.0 .0].name,
-        src_data.rkyv_data.stops[*max_item.0 .1].name,
-        max_item.1
-    );
+    let mut all_connections = AllConnections {
+        stations: vec![
+            ConnectionsFromStation {
+                connections: vec![],
+            };
+            src_data.rkyv_data.stops.len()
+        ],
+    };
+
+    for ((from_station_i, to_station_i), duration) in shortest_durations {
+        all_connections.stations[*from_station_i as usize]
+            .connections
+            .push(ConnectionToStation {
+                to_station_i: *to_station_i,
+                duration,
+            });
+    }
+
+    {
+        let rkyv_buffer = rkyv::to_bytes::<rkyv::rancor::Error>(&all_connections)?;
+        let mut file = std::fs::File::create(gtfs_folder_path.join("all_connections.bin"))?;
+        file.write_all(&rkyv_buffer)?;
+    }
 
     Ok(())
 }
