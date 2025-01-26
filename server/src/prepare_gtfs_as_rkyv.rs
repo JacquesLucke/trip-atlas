@@ -1,16 +1,22 @@
-use std::{io::Write, path::Path};
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 use crate::gtfs_rkyv::*;
 use anyhow::Result;
 
-pub async fn prepare_gtfs(gtfs_folder_path: &Path) -> Result<()> {
-    let buffer = gtfs_data_to_rkyv_buffer(gtfs_folder_path)?;
-    let output_path = gtfs_folder_path.join("data_rkyv.bin");
-    log::info!("Writing data to {:?}", output_path);
-    let mut file = std::fs::File::create(&output_path)?;
-    file.write_all(&buffer)?;
+const RKYV_FILE_NAME: &str = "data_rkyv.bin";
 
-    Ok(())
+pub async fn ensure_gtfs_folder_rkyv(gtfs_folder_path: &Path) -> Result<PathBuf> {
+    let output_path = gtfs_folder_path.join(RKYV_FILE_NAME);
+    if !output_path.exists() {
+        let rkyv_buffer = gtfs_data_to_rkyv_buffer(gtfs_folder_path)?;
+        log::info!("Writing data to {:?}", output_path);
+        let mut file = std::fs::File::create(&output_path)?;
+        file.write_all(&rkyv_buffer)?;
+    }
+    Ok(output_path)
 }
 
 fn gtfs_data_to_rkyv_buffer(gtfs_folder_path: &Path) -> Result<rkyv::util::AlignedVec> {

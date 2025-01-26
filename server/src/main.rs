@@ -8,7 +8,7 @@ use std::{
 use ustr::{ustr, Ustr};
 
 mod gtfs_rkyv;
-mod prepare_gtfs;
+mod prepare_gtfs_as_rkyv;
 
 #[derive(Parser, Debug)]
 #[command(name = "trip-atlas")]
@@ -352,7 +352,7 @@ async fn main() -> Result<()> {
     match cli.command {
         CLICommand::TestAnalysis => test_analysis().await?,
         CLICommand::PrepareGTFS { gtfs_path } => {
-            prepare_gtfs::prepare_gtfs(Path::new(&gtfs_path)).await?
+            prepare_gtfs_as_rkyv::ensure_gtfs_folder_rkyv(Path::new(&gtfs_path)).await?;
         }
     }
     Ok(())
