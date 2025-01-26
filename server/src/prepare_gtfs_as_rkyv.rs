@@ -64,6 +64,7 @@ fn gtfs_data_to_rkyv_buffer(gtfs_folder_path: &Path) -> Result<rkyv::util::Align
             departure_time: stop_time.departure_time,
             stop_id: stop_time.stop_id.clone(),
             stop_sequence: stop_time.stop_sequence,
+            trip_id: stop_time.trip_id.clone(),
         })
     }
 

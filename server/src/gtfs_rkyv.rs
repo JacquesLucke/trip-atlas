@@ -28,6 +28,7 @@ pub struct GtfsStopTime {
     pub departure_time: Option<u32>,
     pub stop_id: String,
     pub stop_sequence: u16,
+    pub trip_id: String,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
