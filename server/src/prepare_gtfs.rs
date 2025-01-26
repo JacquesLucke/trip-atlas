@@ -5,12 +5,13 @@ use anyhow::Result;
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
 #[rkyv(derive(Debug))]
 struct GTFSData {
+    agencies: Vec<GtfsAgency>,
+    calendars: Vec<GtfsCalendar>,
+    calendar_dates: Vec<GtfsCalendarDate>,
+    routes: Vec<GtfsRoute>,
     stops: Vec<GtfsStop>,
     stop_times: Vec<GtfsStopTime>,
     trips: Vec<GtfsTrip>,
-    routes: Vec<GtfsRoute>,
-    agencies: Vec<GtfsAgency>,
-    calendars: Vec<GtfsCalendar>,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
@@ -89,6 +90,21 @@ struct GtfsCalendar {
     sunday: bool,
     start_date: String,
     end_date: String,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
+#[rkyv(derive(Debug))]
+struct GtfsCalendarDate {
+    service_id: String,
+    date: String,
+    exception_type: GtfsExceptionType,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
+#[rkyv(derive(Debug))]
+enum GtfsExceptionType {
+    Added,
+    Deleted,
 }
 
 pub async fn prepare_gtfs(gtfs_path: &Path) -> Result<()> {
@@ -181,6 +197,20 @@ pub async fn prepare_gtfs(gtfs_path: &Path) -> Result<()> {
         });
     }
 
+    let mut gtfs_calendar_dates = vec![];
+    if let Some(calender_dates) = gtfs.calendar_dates {
+        for calendar_date in calender_dates? {
+            gtfs_calendar_dates.push(GtfsCalendarDate {
+                service_id: calendar_date.service_id.clone(),
+                date: calendar_date.date.to_string(),
+                exception_type: match calendar_date.exception_type {
+                    gtfs_structures::Exception::Added => GtfsExceptionType::Added,
+                    gtfs_structures::Exception::Deleted => GtfsExceptionType::Deleted,
+                },
+            });
+        }
+    }
+
     log::info!("Serializing data.");
     let buffer = rkyv::to_bytes::<rkyv::rancor::Error>(&GTFSData {
         stops: gtfs_stops,
@@ -189,6 +219,7 @@ pub async fn prepare_gtfs(gtfs_path: &Path) -> Result<()> {
         routes: gtfs_routes,
         agencies: gtfs_agencies,
         calendars: gtfs_calendars,
+        calendar_dates: gtfs_calendar_dates,
     })?;
 
     let output_path = gtfs_path.join("data_rkyv.bin");
