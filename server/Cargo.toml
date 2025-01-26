@@ -17,6 +17,6 @@ anyhow = "1.0.95"
 futures = "0.3.31"
 clap = { version = "4.5.27", features = ["derive"] }
 gtfs-structures = "0.42.0"
-rkyv = "0.8.10"
+rkyv = { version = "0.8.10", features = ["alloc"] }
 log = "0.4.25"
 simple_logger = "5.0.0"

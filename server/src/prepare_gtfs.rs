@@ -3,9 +3,19 @@ use std::{io::Write, path::Path};
 use crate::gtfs_rkyv::*;
 use anyhow::Result;
 
-pub async fn prepare_gtfs(gtfs_path: &Path) -> Result<()> {
-    log::info!("Loading original GTFS data from {:?}", gtfs_path);
-    let gtfs = gtfs_structures::RawGtfs::from_path(gtfs_path)?;
+pub async fn prepare_gtfs(gtfs_folder_path: &Path) -> Result<()> {
+    let buffer = gtfs_data_to_rkyv_buffer(gtfs_folder_path)?;
+    let output_path = gtfs_folder_path.join("data_rkyv.bin");
+    log::info!("Writing data to {:?}", output_path);
+    let mut file = std::fs::File::create(&output_path)?;
+    file.write_all(&buffer)?;
+
+    Ok(())
+}
+
+fn gtfs_data_to_rkyv_buffer(gtfs_folder_path: &Path) -> Result<rkyv::util::AlignedVec> {
+    log::info!("Loading original GTFS data from {:?}", gtfs_folder_path);
+    let gtfs = gtfs_structures::RawGtfs::from_path(gtfs_folder_path)?;
 
     log::info!("Preparing stops...");
     let mut gtfs_stops = vec![];
@@ -117,11 +127,5 @@ pub async fn prepare_gtfs(gtfs_path: &Path) -> Result<()> {
         calendars: gtfs_calendars,
         calendar_dates: gtfs_calendar_dates,
     })?;
-
-    let output_path = gtfs_path.join("data_rkyv.bin");
-    log::info!("Writing data to {:?}", output_path);
-    let mut file = std::fs::File::create(&output_path)?;
-    file.write_all(&buffer)?;
-
-    Ok(())
+    Ok(buffer)
 }
