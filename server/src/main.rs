@@ -8,6 +8,7 @@ use std::{
 use ustr::{ustr, Ustr};
 
 mod gtfs_rkyv;
+mod prepare_direct_connections_rkyv;
 mod prepare_gtfs_as_rkyv;
 
 #[derive(Parser, Debug)]
@@ -21,6 +22,10 @@ struct CLI {
 enum CLICommand {
     TestAnalysis,
     PrepareGTFS {
+        #[arg(long)]
+        gtfs_path: String,
+    },
+    PrepareDirectConnections {
         #[arg(long)]
         gtfs_path: String,
     },
@@ -353,6 +358,10 @@ async fn main() -> Result<()> {
         CLICommand::TestAnalysis => test_analysis().await?,
         CLICommand::PrepareGTFS { gtfs_path } => {
             prepare_gtfs_as_rkyv::ensure_gtfs_folder_rkyv(Path::new(&gtfs_path)).await?;
+        }
+        CLICommand::PrepareDirectConnections { gtfs_path } => {
+            prepare_direct_connections_rkyv::prepare_direct_connections(Path::new(&gtfs_path))
+                .await?;
         }
     }
     Ok(())
