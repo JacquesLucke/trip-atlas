@@ -21,3 +21,4 @@ rkyv = { version = "0.8.10", features = ["alloc"] }
 log = "0.4.25"
 simple_logger = "5.0.0"
 memmap2 = "0.9.5"
+indicatif = "0.17.9"

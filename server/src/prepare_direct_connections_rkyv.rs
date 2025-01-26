@@ -1,4 +1,5 @@
 use anyhow::Result;
+use indicatif::ProgressIterator;
 use std::{collections::HashMap, io::Write, path::Path};
 
 use crate::prepare_gtfs_as_rkyv;
@@ -23,16 +24,37 @@ pub struct ConnectionToStation {
 }
 
 pub async fn prepare_direct_connections(gtfs_folder_path: &Path) -> Result<()> {
+    let style = indicatif::ProgressStyle::with_template(
+        "[{elapsed_precise}] {bar:40.cyan/blue} {human_pos:>7}/{human_len:7} {msg}",
+    )
+    .unwrap();
+
     let src_data = prepare_gtfs_as_rkyv::load_gtfs_folder_rkyv(gtfs_folder_path).await?;
 
     let mut index_by_stop_id = HashMap::new();
-    for (i, stop) in src_data.rkyv_data.stops.iter().enumerate() {
+    for (i, stop) in src_data
+        .rkyv_data
+        .stops
+        .iter()
+        .enumerate()
+        .into_iter()
+        .progress_with_style(style.clone())
+        .with_message("Remember index by stop id.")
+        .with_finish(indicatif::ProgressFinish::AndLeave)
+    {
         index_by_stop_id.insert(stop.id.as_str(), i as u32);
     }
 
     let mut stops_by_trip = HashMap::new();
 
-    for stop_time in src_data.rkyv_data.stop_times.iter() {
+    for stop_time in src_data
+        .rkyv_data
+        .stop_times
+        .iter()
+        .progress_with_style(style.clone())
+        .with_message("Find stop times for each trip.")
+        .with_finish(indicatif::ProgressFinish::AndLeave)
+    {
         let stops_in_trip = stops_by_trip
             .entry(&stop_time.trip_id)
             .or_insert_with(|| vec![]);
@@ -41,7 +63,12 @@ pub async fn prepare_direct_connections(gtfs_folder_path: &Path) -> Result<()> {
 
     let mut shortest_durations = HashMap::new();
 
-    for item in stops_by_trip.iter_mut() {
+    for item in stops_by_trip
+        .iter_mut()
+        .progress_with_style(style.clone())
+        .with_message("Find shortest durations.")
+        .with_finish(indicatif::ProgressFinish::AndLeave)
+    {
         let stops_in_trip = item.1;
         stops_in_trip.sort_by_key(|stop_time| stop_time.stop_sequence);
 
@@ -56,7 +83,7 @@ pub async fn prepare_direct_connections(gtfs_folder_path: &Path) -> Result<()> {
                 ) {
                     let duration = arrival_time - deparature_time;
                     let entry = shortest_durations
-                        .entry((from_station_i, to_station_i))
+                        .entry((*from_station_i, *to_station_i))
                         .or_insert(duration);
                     if *entry > duration {
                         *entry = duration;
@@ -75,12 +102,17 @@ pub async fn prepare_direct_connections(gtfs_folder_path: &Path) -> Result<()> {
         ],
     };
 
-    for ((from_station_i, to_station_i), duration) in shortest_durations {
+    for ((from_station_i, to_station_i), duration) in shortest_durations
+        .iter()
+        .progress_with_style(style.clone())
+        .with_message("Create connections.")
+        .with_finish(indicatif::ProgressFinish::AndLeave)
+    {
         all_connections.stations[*from_station_i as usize]
             .connections
             .push(ConnectionToStation {
                 to_station_i: *to_station_i,
-                duration,
+                duration: *duration,
             });
     }
 
