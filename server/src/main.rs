@@ -7,6 +7,7 @@ use std::{
 };
 use ustr::{ustr, Ustr};
 
+mod gtfs_rkyv;
 mod prepare_gtfs;
 
 #[derive(Parser, Debug)]

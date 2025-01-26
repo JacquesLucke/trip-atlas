@@ -1,111 +1,7 @@
 use std::{io::Write, path::Path};
 
+use crate::gtfs_rkyv::*;
 use anyhow::Result;
-
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
-#[rkyv(derive(Debug))]
-struct GTFSData {
-    agencies: Vec<GtfsAgency>,
-    calendars: Vec<GtfsCalendar>,
-    calendar_dates: Vec<GtfsCalendarDate>,
-    routes: Vec<GtfsRoute>,
-    stops: Vec<GtfsStop>,
-    stop_times: Vec<GtfsStopTime>,
-    trips: Vec<GtfsTrip>,
-}
-
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
-#[rkyv(derive(Debug))]
-struct GtfsStop {
-    id: String,
-    code: Option<String>,
-    name: Option<String>,
-    parent_station_id: Option<String>,
-    latitude: Option<f64>,
-    longitude: Option<f64>,
-}
-
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
-#[rkyv(derive(Debug))]
-struct GtfsStopTime {
-    arrival_time: Option<u32>,
-    departure_time: Option<u32>,
-    stop_id: String,
-    stop_sequence: u16,
-}
-
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
-#[rkyv(derive(Debug))]
-struct GtfsTrip {
-    id: String,
-    service_id: String,
-    route_id: String,
-    short_name: Option<String>,
-}
-
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
-#[rkyv(derive(Debug))]
-struct GtfsRoute {
-    id: String,
-    short_name: Option<String>,
-    long_name: Option<String>,
-    route_type: GtfsRouteType,
-    agency_id: Option<String>,
-}
-
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
-#[rkyv(derive(Debug))]
-pub enum GtfsRouteType {
-    Tramway,
-    Subway,
-    Rail,
-    Bus,
-    Ferry,
-    CableCar,
-    Gondola,
-    Funicular,
-    Coach,
-    Air,
-    Taxi,
-    Other(i16),
-}
-
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
-#[rkyv(derive(Debug))]
-struct GtfsAgency {
-    id: Option<String>,
-    name: String,
-}
-
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
-#[rkyv(derive(Debug))]
-struct GtfsCalendar {
-    id: String,
-    monday: bool,
-    tuesday: bool,
-    wednesday: bool,
-    thursday: bool,
-    friday: bool,
-    saturday: bool,
-    sunday: bool,
-    start_date: String,
-    end_date: String,
-}
-
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
-#[rkyv(derive(Debug))]
-struct GtfsCalendarDate {
-    service_id: String,
-    date: String,
-    exception_type: GtfsExceptionType,
-}
-
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
-#[rkyv(derive(Debug))]
-enum GtfsExceptionType {
-    Added,
-    Deleted,
-}
 
 pub async fn prepare_gtfs(gtfs_path: &Path) -> Result<()> {
     log::info!("Loading original GTFS data from {:?}", gtfs_path);
@@ -212,7 +108,7 @@ pub async fn prepare_gtfs(gtfs_path: &Path) -> Result<()> {
     }
 
     log::info!("Serializing data.");
-    let buffer = rkyv::to_bytes::<rkyv::rancor::Error>(&GTFSData {
+    let buffer = rkyv::to_bytes::<rkyv::rancor::Error>(&GtfsData {
         stops: gtfs_stops,
         stop_times: gtfs_stop_times,
         trips: gtfs_trips,
