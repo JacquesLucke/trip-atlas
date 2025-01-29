@@ -4,6 +4,7 @@ import App from "./App.tsx";
 import "./tailwind.css";
 import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import locations from "./stations_test_data.json";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -35,7 +36,9 @@ L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 interface TileOverlayInfo {}
 
-const myPoints = [new L.LatLng(52.637778, 13.203611), new L.LatLng(52, 13)];
+const myPoints = locations.stations.map(
+  (station) => new L.LatLng(station.latitude, station.longitude)
+);
 
 const activeTiles = new Map<HTMLElement, TileOverlayInfo>();
 
@@ -55,15 +58,25 @@ const CustomMapLayer = L.GridLayer.extend({
     svg.setAttribute("width", `${tileSize.x}px`);
     svg.setAttribute("height", `${tileSize.y}px`);
 
+    const circleRadius = 5;
+
     for (const point of myPoints) {
       const pixelPos = map
         .project(point, coords.z)
         .subtract(coords.scaleBy(tileSize));
+      if (
+        pixelPos.x < -circleRadius ||
+        pixelPos.x > tileSize.x + circleRadius ||
+        pixelPos.y < -circleRadius ||
+        pixelPos.y > tileSize.y + circleRadius
+      ) {
+        continue;
+      }
 
       const circle = document.createElementNS(svgNS, "circle");
       circle.setAttribute("cx", `${pixelPos.x}`);
       circle.setAttribute("cy", `${pixelPos.y}`);
-      circle.setAttribute("r", `10px`);
+      circle.setAttribute("r", `${circleRadius}px`);
       circle.setAttribute("fill", "red");
       circle.setAttribute("opacity", "1");
 
