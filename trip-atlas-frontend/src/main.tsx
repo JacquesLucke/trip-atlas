@@ -5,6 +5,7 @@ import "./tailwind.css";
 import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import locations from "./stations_test_data.json";
+import RBush from "rbush";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -36,8 +37,24 @@ L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 interface TileOverlayInfo {}
 
-const myPoints = locations.stations.map(
-  (station) => new L.LatLng(station.latitude, station.longitude)
+interface StationInfo {
+  latitude: number;
+  longitude: number;
+  name: string;
+}
+
+const stationsTree = new RBush<StationInfo>();
+
+stationsTree.load(
+  locations.stations.map((station) => {
+    return {
+      ...station,
+      minX: station.longitude,
+      minY: station.latitude,
+      maxX: station.longitude,
+      maxY: station.latitude,
+    };
+  })
 );
 
 const activeTiles = new Map<HTMLElement, TileOverlayInfo>();
@@ -60,9 +77,18 @@ const CustomMapLayer = L.GridLayer.extend({
 
     const circleRadius = 5;
 
-    for (const point of myPoints) {
+    const paddedBounds = bounds.pad(0.3);
+
+    const foundStations = stationsTree.search({
+      minX: paddedBounds.getWest(),
+      minY: paddedBounds.getSouth(),
+      maxX: paddedBounds.getEast(),
+      maxY: paddedBounds.getNorth(),
+    });
+
+    for (const station of foundStations) {
       const pixelPos = map
-        .project(point, coords.z)
+        .project(new L.LatLng(station.latitude, station.longitude), coords.z)
         .subtract(coords.scaleBy(tileSize));
       if (
         pixelPos.x < -circleRadius ||
@@ -91,6 +117,5 @@ const CustomMapLayer = L.GridLayer.extend({
 const customLayer = new CustomMapLayer();
 customLayer.on("tileunload", (event: L.TileEvent) => {
   activeTiles.delete(event.tile);
-  console.log(activeTiles.size);
 });
 customLayer.addTo(map);
