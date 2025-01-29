@@ -33,12 +33,31 @@ interface TileOverlayInfo {}
 const activeTiles = new Map<HTMLElement, TileOverlayInfo>();
 
 const CustomMapLayer = L.GridLayer.extend({
-  createTile: (coords: L.Point) => {
-    const tile = L.DomUtil.create("div", "leaflet-tile");
-    tile.innerHTML = `<div class="bg-white w-fit">${coords}</div>`;
+  createTile: function (this: L.GridLayer, coords: L.Coords) {
+    const tileSize = this.getTileSize();
+    const corner1 = map.unproject(coords.scaleBy(tileSize), coords.z);
+    const corner2 = map.unproject(
+      coords.add([1, 1]).scaleBy(tileSize),
+      coords.z
+    );
+    const bounds = new L.LatLngBounds([corner1, corner2]);
 
+    const tile = L.DomUtil.create("div", "leaflet-tile");
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("width", `${tileSize.x}px`);
+    svg.setAttribute("height", `${tileSize.y}px`);
+
+    const circle = document.createElementNS(svgNS, "circle");
+    circle.setAttribute("cx", `${tileSize.x / 2}`);
+    circle.setAttribute("cy", `${tileSize.x / 2}`);
+    circle.setAttribute("r", `${150}`);
+    circle.setAttribute("fill", "red");
+    circle.setAttribute("opacity", "0.5");
+
+    svg.appendChild(circle);
+    tile.appendChild(svg);
     activeTiles.set(tile, {});
-    console.log(activeTiles.size);
     return tile;
   },
 });
