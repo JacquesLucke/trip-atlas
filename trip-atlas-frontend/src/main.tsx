@@ -30,6 +30,8 @@ L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 interface TileOverlayInfo {}
 
+const myPoints = [new L.LatLng(52.637778, 13.203611), new L.LatLng(52, 13)];
+
 const activeTiles = new Map<HTMLElement, TileOverlayInfo>();
 
 const CustomMapLayer = L.GridLayer.extend({
@@ -48,14 +50,20 @@ const CustomMapLayer = L.GridLayer.extend({
     svg.setAttribute("width", `${tileSize.x}px`);
     svg.setAttribute("height", `${tileSize.y}px`);
 
-    const circle = document.createElementNS(svgNS, "circle");
-    circle.setAttribute("cx", `${tileSize.x / 2}`);
-    circle.setAttribute("cy", `${tileSize.x / 2}`);
-    circle.setAttribute("r", `${150}`);
-    circle.setAttribute("fill", "red");
-    circle.setAttribute("opacity", "0.5");
+    for (const point of myPoints) {
+      const pixelPos = map
+        .project(point, coords.z)
+        .subtract(coords.scaleBy(tileSize));
 
-    svg.appendChild(circle);
+      const circle = document.createElementNS(svgNS, "circle");
+      circle.setAttribute("cx", `${pixelPos.x}`);
+      circle.setAttribute("cy", `${pixelPos.y}`);
+      circle.setAttribute("r", `${0.01 / Math.pow(2, -coords.z)}`);
+      circle.setAttribute("fill", "red");
+
+      svg.appendChild(circle);
+    }
+
     tile.appendChild(svg);
     activeTiles.set(tile, {});
     return tile;
