@@ -15,7 +15,12 @@ createRoot(document.getElementById("root")!).render(
 const mapContainerId = "map-container";
 const defaultCoordinates = new L.LatLng(52.637778, 13.203611);
 const defaultZoom = 14;
-const map = L.map(mapContainerId).setView(defaultCoordinates, defaultZoom);
+const map = L.map(mapContainerId, {
+  // Fractional zoom has visible lines between the tiles currently.
+  // https://github.com/Leaflet/Leaflet/issues/3575
+  // zoomSnap: 0,
+  // zoomDelta: 1,
+}).setView(defaultCoordinates, defaultZoom);
 
 // Add the Leaflet specific attribution.
 map.attributionControl.setPrefix(
@@ -58,8 +63,9 @@ const CustomMapLayer = L.GridLayer.extend({
       const circle = document.createElementNS(svgNS, "circle");
       circle.setAttribute("cx", `${pixelPos.x}`);
       circle.setAttribute("cy", `${pixelPos.y}`);
-      circle.setAttribute("r", `${0.01 / Math.pow(2, -coords.z)}`);
+      circle.setAttribute("r", `10px`);
       circle.setAttribute("fill", "red");
+      circle.setAttribute("opacity", "1");
 
       svg.appendChild(circle);
     }
