@@ -72,36 +72,12 @@ pub async fn find_optimal_paths(gtfs_folder_path: &Path) -> Result<()> {
         };
         all_connections_rkyv.stations.len()
     ];
-    let mut queue = BinaryHeap::new();
+    find_optimal_paths_with_binary_heap(
+        &all_connections_rkyv,
+        &start_station_indices,
+        &mut station_states,
+    );
 
-    for start_station_i in start_station_indices {
-        queue.push(Reverse(TimeWithStation {
-            time: 0,
-            station_i: start_station_i,
-        }));
-        station_states[start_station_i as usize].earliest_arrival = Some(0);
-    }
-
-    while let Some(event) = queue.pop() {
-        let station_i = event.0.station_i;
-        let station = &all_connections_rkyv.stations[station_i as usize];
-        for connection in station.connections.iter() {
-            let next_station_i = connection.to_station_i.to_native();
-            let next_station_time = event.0.time + connection.duration;
-            let next_station_state = &mut station_states[next_station_i as usize];
-            if let Some(next_station_earliest_arrival) = next_station_state.earliest_arrival {
-                if next_station_time >= next_station_earliest_arrival {
-                    // Connection arrives at a later point than already found.
-                    continue;
-                }
-            }
-            next_station_state.earliest_arrival = Some(next_station_time);
-            queue.push(Reverse(TimeWithStation {
-                time: next_station_time,
-                station_i: next_station_i,
-            }));
-        }
-    }
     println!("Took {:?}", start_instant.elapsed());
 
     let mut result = OutputStationsWithTime { stations: vec![] };
@@ -146,4 +122,41 @@ pub async fn find_optimal_paths(gtfs_folder_path: &Path) -> Result<()> {
     // );
 
     Ok(())
+}
+
+fn find_optimal_paths_with_binary_heap(
+    all_connections_rkyv: &prepare_direct_connections_rkyv::ArchivedAllConnections,
+    start_station_indices: &[u32],
+    station_states: &mut [StationState],
+) {
+    let mut queue = BinaryHeap::new();
+
+    for start_station_i in start_station_indices {
+        queue.push(Reverse(TimeWithStation {
+            time: 0,
+            station_i: *start_station_i,
+        }));
+        station_states[*start_station_i as usize].earliest_arrival = Some(0);
+    }
+
+    while let Some(event) = queue.pop() {
+        let station_i = event.0.station_i;
+        let station = &all_connections_rkyv.stations[station_i as usize];
+        for connection in station.connections.iter() {
+            let next_station_i = connection.to_station_i.to_native();
+            let next_station_time = event.0.time + connection.duration;
+            let next_station_state = &mut station_states[next_station_i as usize];
+            if let Some(next_station_earliest_arrival) = next_station_state.earliest_arrival {
+                if next_station_time >= next_station_earliest_arrival {
+                    // Connection arrives at a later point than already found.
+                    continue;
+                }
+            }
+            next_station_state.earliest_arrival = Some(next_station_time);
+            queue.push(Reverse(TimeWithStation {
+                time: next_station_time,
+                station_i: next_station_i,
+            }));
+        }
+    }
 }
