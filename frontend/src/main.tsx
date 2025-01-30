@@ -41,6 +41,7 @@ interface StationInfo {
   latitude: number;
   longitude: number;
   name: string;
+  time?: number;
 }
 
 const stationsTree = new RBush<StationInfo>();
@@ -75,7 +76,7 @@ const CustomMapLayer = L.GridLayer.extend({
     svg.setAttribute("width", `${tileSize.x}px`);
     svg.setAttribute("height", `${tileSize.y}px`);
 
-    const circleRadius = 5;
+    const circleRadius = 3;
 
     const paddedBounds = bounds.pad(0.3);
 
@@ -99,12 +100,17 @@ const CustomMapLayer = L.GridLayer.extend({
         continue;
       }
 
+      const time = station.time ?? Number.MAX_VALUE;
+
       const circle = document.createElementNS(svgNS, "circle");
       circle.setAttribute("cx", `${pixelPos.x}`);
       circle.setAttribute("cy", `${pixelPos.y}`);
       circle.setAttribute("r", `${circleRadius}px`);
-      circle.setAttribute("fill", "red");
-      circle.setAttribute("opacity", "1");
+      circle.setAttribute(
+        "fill",
+        `hsl(${Math.min(1, time / 3000)}turn, 100%, 50%)`
+      );
+      circle.setAttribute("opacity", `1.0`);
 
       svg.appendChild(circle);
     }
