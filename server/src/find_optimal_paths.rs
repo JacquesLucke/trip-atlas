@@ -264,8 +264,4 @@ fn find_optimal_paths_with_time_buckets(
             bucket.station_indices = new_station_indices;
         }
     }
-
-    for bucket in buckets.iter_mut() {
-        bucket.station_indices.clear(&mut chunk_pool);
-    }
 }
