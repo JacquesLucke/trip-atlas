@@ -50,8 +50,8 @@ pub struct GtfsRoute {
     pub agency_id: Option<String>,
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
-#[rkyv(derive(Debug))]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, PartialEq, Eq, Hash)]
+#[rkyv(derive(Debug, PartialEq, Eq, Hash))]
 pub enum GtfsRouteType {
     Tramway,
     Subway,
