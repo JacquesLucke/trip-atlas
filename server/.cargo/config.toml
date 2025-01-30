@@ -1,2 +1,0 @@
-[env]
-DATABASE_URL = "sqlite:/home/jacques/Downloads/data_copy.db"
