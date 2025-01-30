@@ -38,3 +38,4 @@ jobs:
 
       - name: Build Binary
         run: cargo build --verbose --locked --release --target ${{ matrix.target }}
+        working-directory: ./server
