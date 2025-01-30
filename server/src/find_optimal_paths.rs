@@ -111,11 +111,19 @@ pub async fn find_optimal_paths(gtfs_folder_path: &Path) -> Result<()> {
         let station_state = &station_states[station_i as usize];
         let stop = &gtfs_rkyv.stops[station.main_stop_i.to_native() as usize];
 
-        // if !stop.name.as_ref().unwrap().contains("Hennigsdorf")
-        //     && !stop.name.as_ref().unwrap().contains("Berlin")
+        // if stop.latitude.unwrap() > 53.12
+        //     || stop.latitude.unwrap() < 52.19
+        //     || stop.longitude.unwrap() < 12.46
+        //     || stop.longitude.unwrap() > 14.0
         // {
         //     continue;
         // }
+
+        if let Some(name) = stop.name.as_ref() {
+            if !name.contains("Hennigsdorf") {
+                continue;
+            }
+        }
 
         if let Some(earliest_arrival) = station_state.earliest_arrival {
             result.stations.push(OutputStationWithTime {

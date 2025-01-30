@@ -1,0 +1,5 @@
+// Update cors.
+s3cmd setcors s3cmd-cors.xml s3://trip-atlas
+
+// Upload test data.
+rclone copy --s3-acl public-read stations_test_data.json hetzner:trip-atlas/test-data

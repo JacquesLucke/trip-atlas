@@ -1,0 +1,8 @@
+<CORSConfiguration>
+    <CORSRule>
+        <AllowedHeaders>*</AllowedHeaders>
+        <AllowedMethod>GET</AllowedMethod>
+        <AllowedMethod>HEAD</AllowedMethod>
+        <AllowedOrigin>*</AllowedOrigin>
+    </CORSRule>
+</CORSConfiguration>

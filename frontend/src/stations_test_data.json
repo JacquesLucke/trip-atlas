@@ -2,196 +2,235 @@
   "stations": [
     {
       "name": "Berlin, Heiligenseestr./Hennigsdorfer Str.",
+      "time": 438,
       "latitude": 52.61131,
       "longitude": 13.217162
     },
     {
       "name": "Hennigsdorf, A.-Kolping-Platz",
+      "time": 180,
       "latitude": 52.642803,
       "longitude": 13.200852
     },
     {
       "name": "Hennigsdorf, Akazienweg",
+      "time": 480,
       "latitude": 52.647514,
       "longitude": 13.199188
     },
     {
       "name": "Hennigsdorf, Alsdorfer Str.",
+      "time": 960,
       "latitude": 52.651817,
       "longitude": 13.197347
     },
     {
       "name": "Hennigsdorf, Am Bahndamm",
+      "time": 360,
       "latitude": 52.63945,
       "longitude": 13.208377
     },
     {
       "name": "Hennigsdorf, Am Rathenaupark",
+      "time": 180,
       "latitude": 52.631184,
       "longitude": 13.207376
     },
     {
       "name": "Hennigsdorf, Clara-Schabbel-Str.",
+      "time": 360,
       "latitude": 52.62217,
       "longitude": 13.203238
     },
     {
       "name": "Hennigsdorf, Edisonstr.",
+      "time": 240,
       "latitude": 52.62893,
       "longitude": 13.204168
     },
     {
       "name": "Hennigsdorf, F.-Wolf-Str.",
+      "time": 840,
       "latitude": 52.654316,
       "longitude": 13.194117
     },
     {
       "name": "Hennigsdorf, Feldstr.",
+      "time": 360,
       "latitude": 52.642464,
       "longitude": 13.194754
     },
     {
       "name": "Hennigsdorf, Fontaneschule",
+      "time": 180,
       "latitude": 52.635212,
       "longitude": 13.198882
     },
     {
       "name": "Hennigsdorf, Fontanesiedlung Mitte",
+      "time": 600,
       "latitude": 52.651222,
       "longitude": 13.201355
     },
     {
       "name": "Hennigsdorf, Fontanesiedlung Nord",
+      "time": 660,
       "latitude": 52.65458,
       "longitude": 13.20122
     },
     {
       "name": "Hennigsdorf, Fontanestr./Akazienweg",
+      "time": 210,
       "latitude": 52.646126,
       "longitude": 13.201302
     },
     {
       "name": "Hennigsdorf, Friedhof",
+      "time": 240,
       "latitude": 52.637047,
       "longitude": 13.193077
     },
     {
       "name": "Hennigsdorf, Fußgängertunnel",
+      "time": 660,
       "latitude": 52.65529,
       "longitude": 13.204211
     },
     {
       "name": "Hennigsdorf, Gewerbegebiet Nord",
+      "time": 600,
       "latitude": 52.651657,
       "longitude": 13.205297
     },
     {
       "name": "Hennigsdorf, Hauptstr.",
+      "time": 240,
       "latitude": 52.636715,
       "longitude": 13.209295
     },
     {
       "name": "Hennigsdorf, Heideweg",
+      "time": 420,
       "latitude": 52.644802,
       "longitude": 13.196775
     },
     {
       "name": "Hennigsdorf, Humboldtstr.",
+      "time": 120,
       "latitude": 52.638645,
       "longitude": 13.199732
     },
     {
       "name": "Hennigsdorf, Kleiststr.",
+      "time": 180,
       "latitude": 52.63434,
       "longitude": 13.198687
     },
     {
       "name": "Hennigsdorf, Kokillenweg",
+      "time": 540,
       "latitude": 52.64907,
       "longitude": 13.201522
     },
     {
       "name": "Hennigsdorf, Krankenhaus",
+      "time": 390,
       "latitude": 52.655743,
       "longitude": 13.188157
     },
     {
       "name": "Hennigsdorf, Marwitzer Str.",
+      "time": 270,
       "latitude": 52.649803,
       "longitude": 13.196896
     },
     {
       "name": "Hennigsdorf, Neubrück",
+      "time": 360,
       "latitude": 52.636276,
       "longitude": 13.218453
     },
     {
       "name": "Hennigsdorf, Neuendorfstr.",
+      "time": 180,
       "latitude": 52.634068,
       "longitude": 13.206488
     },
     {
       "name": "Hennigsdorf, Poststr.",
+      "time": 60,
       "latitude": 52.63923,
       "longitude": 13.204439
     },
     {
       "name": "Hennigsdorf, Rathenaustr.",
+      "time": 120,
       "latitude": 52.633865,
       "longitude": 13.204333
     },
     {
       "name": "Hennigsdorf, Reinickendorfer Str.",
+      "time": 780,
       "latitude": 52.655094,
       "longitude": 13.197176
     },
     {
       "name": "Hennigsdorf, Schulstr.",
+      "time": 480,
       "latitude": 52.63872,
       "longitude": 13.210519
     },
     {
       "name": "Hennigsdorf, Seilerstr.",
+      "time": 480,
       "latitude": 52.6427,
       "longitude": 13.206
     },
     {
       "name": "Hennigsdorf, Stadtklubhaus",
+      "time": 300,
       "latitude": 52.62825,
       "longitude": 13.204795
     },
     {
       "name": "Hennigsdorf, Stauffenbergstr.",
+      "time": 180,
       "latitude": 52.63952,
       "longitude": 13.203679
     },
     {
       "name": "Hennigsdorf, Stolpe Süd",
+      "time": 540,
       "latitude": 52.629826,
       "longitude": 13.230053
     },
     {
       "name": "Hennigsdorf, Voltastr.",
+      "time": 240,
       "latitude": 52.630142,
       "longitude": 13.200775
     },
     {
       "name": "Hennigsdorf, W.-Küntscher-Str.",
+      "time": 540,
       "latitude": 52.648186,
       "longitude": 13.204811
     },
     {
       "name": "Hennigsdorf, Waidmannsweg",
+      "time": 330,
       "latitude": 52.652225,
       "longitude": 13.192593
     },
     {
       "name": "S Hennigsdorf Bhf",
+      "time": 0,
       "latitude": 52.637867,
       "longitude": 13.205874
     },
     {
       "name": "Velten, Hennigsdorfer Str.",
+      "time": 660,
       "latitude": 52.677612,
       "longitude": 13.189599
     }
