@@ -1,5 +1,7 @@
 use std::{cmp::Reverse, collections::BinaryHeap, io::Write, path::Path};
 
+use crate::pooled_chunked_vector::{ChunkedVector, ChunkedVectorPool};
+
 use anyhow::Result;
 
 use crate::{prepare_direct_connections_rkyv, prepare_gtfs_as_rkyv};
@@ -29,10 +31,12 @@ pub async fn find_optimal_paths(gtfs_folder_path: &Path) -> Result<()> {
 
     let mut start_station_indices = vec![];
 
+    let start_station_names = vec!["S Hennigsdorf Bhf", "AB-Schweinheim, Feldchenstr."];
+
     for (i, station) in all_connections_rkyv.stations.iter().enumerate() {
         let stop = &gtfs_rkyv.stops[station.main_stop_i.to_native() as usize];
         if let Some(name) = stop.name.as_ref() {
-            if name == "S Hennigsdorf Bhf" {
+            if start_station_names.contains(&name.as_str()) {
                 start_station_indices.push(i as u32);
             }
         }
@@ -47,16 +51,32 @@ pub async fn find_optimal_paths(gtfs_folder_path: &Path) -> Result<()> {
 
     let start_instant = std::time::Instant::now();
 
-    // _find_optimal_paths_with_binary_heap(
-    //     &all_connections_rkyv,
-    //     &start_station_indices,
-    //     &mut station_states,
-    // );
-    find_optimal_paths_with_time_buckets(
-        &all_connections_rkyv,
-        &start_station_indices,
-        &mut station_states,
-    );
+    let mut chunk_pool: ChunkedVectorPool<u32> = ChunkedVectorPool::new();
+
+    let iterations_num = 1;
+
+    for iteration_i in 0..iterations_num {
+        // _find_optimal_paths_with_binary_heap(
+        //     &all_connections_rkyv,
+        //     &start_station_indices,
+        //     &mut station_states,
+        // );
+        find_optimal_paths_with_time_buckets(
+            &all_connections_rkyv,
+            &start_station_indices,
+            &mut station_states,
+            &mut chunk_pool,
+        );
+
+        if iteration_i < iterations_num - 1 {
+            // Reset for benchmarking reasons.
+            for item in &mut station_states {
+                *item = StationState {
+                    earliest_arrival: None,
+                };
+            }
+        }
+    }
 
     println!("Took {:?}", start_instant.elapsed());
 
@@ -67,13 +87,13 @@ pub async fn find_optimal_paths(gtfs_folder_path: &Path) -> Result<()> {
         let station_state = &station_states[station_i as usize];
         let stop = &gtfs_rkyv.stops[station.main_stop_i.to_native() as usize];
 
-        // if stop.latitude.unwrap() > 53.12
-        //     || stop.latitude.unwrap() < 52.19
-        //     || stop.longitude.unwrap() < 12.46
-        //     || stop.longitude.unwrap() > 14.0
-        // {
-        //     continue;
-        // }
+        if stop.latitude.unwrap() > 53.12
+            || stop.latitude.unwrap() < 52.19
+            || stop.longitude.unwrap() < 12.46
+            || stop.longitude.unwrap() > 14.0
+        {
+            continue;
+        }
 
         if let Some(name) = stop.name.as_ref() {
             if !name.contains("Hennigsdorf") {
@@ -171,27 +191,30 @@ fn find_optimal_paths_with_time_buckets(
     all_connections_rkyv: &prepare_direct_connections_rkyv::ArchivedAllConnections,
     start_station_indices: &[u32],
     station_states: &mut [StationState],
+    mut chunk_pool: &mut ChunkedVectorPool<u32>,
 ) {
-    #[derive(Debug, Clone)]
     struct Bucket {
-        station_indices: Vec<u32>,
+        station_indices: ChunkedVector<u32>,
     }
 
     let max_seconds = 3000 * 60;
     let seconds_per_bucket = 30;
     let buckets_num = max_seconds / seconds_per_bucket + 1;
 
-    let mut buckets = vec![
-        Bucket {
-            station_indices: vec![]
-        };
-        buckets_num
-    ];
+    let mut buckets = vec![];
+    buckets.reserve_exact(buckets_num);
+    for _ in 0..buckets_num {
+        buckets.push(Bucket {
+            station_indices: ChunkedVector::new(),
+        });
+    }
 
     let first_bucket = &mut buckets[0];
-    first_bucket
-        .station_indices
-        .extend_from_slice(start_station_indices);
+    for station_i in start_station_indices {
+        first_bucket
+            .station_indices
+            .push(*station_i, &mut chunk_pool);
+    }
 
     for station_i in start_station_indices {
         let station_state = &mut station_states[*station_i as usize];
@@ -204,32 +227,45 @@ fn find_optimal_paths_with_time_buckets(
 
         let bucket = &mut before_buckets[bucket_i];
         while !bucket.station_indices.is_empty() {
-            let mut new_station_indices = vec![];
-            for station_i in bucket.station_indices.iter() {
-                let station = &all_connections_rkyv.stations[*station_i as usize];
-                for connection in station.connections.iter() {
-                    let connection_duration = connection.duration.to_native() as usize;
-                    let next_station_i = connection.to_station_i.to_native();
-                    let next_station_state = &mut station_states[next_station_i as usize];
-                    let next_station_time = current_time + connection_duration;
-                    if let Some(next_station_earliest_arrival) = next_station_state.earliest_arrival
-                    {
-                        if next_station_time >= next_station_earliest_arrival as usize {
-                            // Connection arrives at a later point than already found.
-                            continue;
+            let mut new_station_indices = ChunkedVector::new();
+            let mut chunk_opt = bucket.station_indices.first_chunk();
+            while let Some(chunk) = chunk_opt {
+                for station_i in chunk.get_slice() {
+                    let station = &all_connections_rkyv.stations[*station_i as usize];
+                    for connection in station.connections.iter() {
+                        let connection_duration = connection.duration.to_native() as usize;
+                        let next_station_i = connection.to_station_i.to_native();
+                        let next_station_state = &mut station_states[next_station_i as usize];
+                        let next_station_time = current_time + connection_duration;
+                        if let Some(next_station_earliest_arrival) =
+                            next_station_state.earliest_arrival
+                        {
+                            if next_station_time >= next_station_earliest_arrival as usize {
+                                // Connection arrives at a later point than already found.
+                                continue;
+                            }
+                        }
+                        next_station_state.earliest_arrival = Some(next_station_time as u32);
+                        let next_bucket_i = next_station_time / seconds_per_bucket;
+                        if next_bucket_i == bucket_i {
+                            new_station_indices.push(next_station_i, &mut chunk_pool);
+                        } else {
+                            let next_bucket = &mut after_buckets[next_bucket_i - bucket_i - 1];
+                            next_bucket
+                                .station_indices
+                                .push(next_station_i, &mut chunk_pool);
                         }
                     }
-                    next_station_state.earliest_arrival = Some(next_station_time as u32);
-                    let next_bucket_i = next_station_time / seconds_per_bucket;
-                    if next_bucket_i == bucket_i {
-                        new_station_indices.push(next_station_i);
-                    } else {
-                        let next_bucket = &mut after_buckets[next_bucket_i - bucket_i - 1];
-                        next_bucket.station_indices.push(next_station_i);
-                    }
                 }
+                chunk_opt = chunk.next_chunk();
             }
+
+            bucket.station_indices.clear(&mut chunk_pool);
             bucket.station_indices = new_station_indices;
         }
+    }
+
+    for bucket in buckets.iter_mut() {
+        bucket.station_indices.clear(&mut chunk_pool);
     }
 }
