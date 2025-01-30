@@ -1,29 +1,68 @@
+use crate::gtfs_rkyv::{self, *};
 use anyhow::Result;
 use indicatif::ProgressIterator;
-use std::{collections::HashMap, io::Write, path::Path};
+use std::{
+    collections::HashMap,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 use crate::prepare_gtfs_as_rkyv;
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
 #[rkyv(derive(Debug))]
 pub struct AllConnections {
-    pub stations: Vec<ConnectionsFromStation>,
+    pub stops: Vec<ConnectionsFromStop>,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone)]
 #[rkyv(derive(Debug))]
-pub struct ConnectionsFromStation {
-    pub connections: Vec<ConnectionToStation>,
+pub struct ConnectionsFromStop {
+    pub connections: Vec<ConnectionToStop>,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Copy, Clone)]
 #[rkyv(derive(Debug))]
-pub struct ConnectionToStation {
+pub struct ConnectionToStop {
     pub to_station_i: u32,
     pub duration: u32,
 }
 
-pub async fn prepare_direct_connections(gtfs_folder_path: &Path) -> Result<()> {
+pub struct AllConnectionsRkyv<'a> {
+    pub _mmap: memmap2::Mmap,
+    // This references data owned by the mmap.
+    pub data: &'a ArchivedAllConnections,
+}
+
+const DIRECT_CONNECTIONS_FILE_NAME: &str = "all_connections.bin";
+
+pub async fn load_direct_connections_rkyv(gtfs_folder_path: &Path) -> Result<AllConnectionsRkyv> {
+    let rkyv_path = ensure_direct_connections_rkyv(gtfs_folder_path).await?;
+    let file = std::fs::File::open(&rkyv_path)?;
+    // Safety: This is safe for as long as the underlying file is not modified.
+    let mmap = unsafe { memmap2::Mmap::map(&file)? };
+    let buffer: &[u8] = unsafe { std::slice::from_raw_parts(mmap.as_ptr(), mmap.len()) };
+    let rkyv_data = unsafe { rkyv::access_unchecked::<ArchivedAllConnections>(buffer) };
+    Ok(AllConnectionsRkyv {
+        _mmap: mmap,
+        data: rkyv_data,
+    })
+}
+
+pub async fn ensure_direct_connections_rkyv(gtfs_folder_path: &Path) -> Result<PathBuf> {
+    let output_path = gtfs_folder_path.join(DIRECT_CONNECTIONS_FILE_NAME);
+    if !output_path.exists() {
+        let rkyv_buffer = get_direct_connections_rkyv_buffer(gtfs_folder_path).await?;
+        log::info!("Writing data to {:?}", output_path);
+        let mut file = std::fs::File::create(&output_path)?;
+        file.write_all(&rkyv_buffer)?;
+    }
+    Ok(output_path)
+}
+
+pub async fn get_direct_connections_rkyv_buffer(
+    gtfs_folder_path: &Path,
+) -> Result<rkyv::util::AlignedVec> {
     let style = indicatif::ProgressStyle::with_template(
         "[{elapsed_precise}] {bar:40.cyan/blue} {human_pos:>7}/{human_len:7} {msg}",
     )
@@ -73,7 +112,7 @@ pub async fn prepare_direct_connections(gtfs_folder_path: &Path) -> Result<()> {
         stops_in_trip.sort_by_key(|stop_time| stop_time.stop_sequence);
 
         for connection in stops_in_trip.windows(2) {
-            if let (Some(from_station_i), Some(to_station_i)) = (
+            if let (Some(from_stop_i), Some(to_stop_i)) = (
                 index_by_stop_id.get(connection[0].stop_id.as_str()),
                 index_by_stop_id.get(connection[1].stop_id.as_str()),
             ) {
@@ -83,7 +122,7 @@ pub async fn prepare_direct_connections(gtfs_folder_path: &Path) -> Result<()> {
                 ) {
                     let duration = arrival_time - deparature_time;
                     let entry = shortest_durations
-                        .entry((*from_station_i, *to_station_i))
+                        .entry((*from_stop_i, *to_stop_i))
                         .or_insert(duration);
                     if *entry > duration {
                         *entry = duration;
@@ -94,8 +133,8 @@ pub async fn prepare_direct_connections(gtfs_folder_path: &Path) -> Result<()> {
     }
 
     let mut all_connections = AllConnections {
-        stations: vec![
-            ConnectionsFromStation {
+        stops: vec![
+            ConnectionsFromStop {
                 connections: vec![],
             };
             src_data.rkyv_data.stops.len()
@@ -108,19 +147,13 @@ pub async fn prepare_direct_connections(gtfs_folder_path: &Path) -> Result<()> {
         .with_message("Create connections.")
         .with_finish(indicatif::ProgressFinish::AndLeave)
     {
-        all_connections.stations[*from_station_i as usize]
+        all_connections.stops[*from_station_i as usize]
             .connections
-            .push(ConnectionToStation {
+            .push(ConnectionToStop {
                 to_station_i: *to_station_i,
                 duration: *duration,
             });
     }
 
-    {
-        let rkyv_buffer = rkyv::to_bytes::<rkyv::rancor::Error>(&all_connections)?;
-        let mut file = std::fs::File::create(gtfs_folder_path.join("all_connections.bin"))?;
-        file.write_all(&rkyv_buffer)?;
-    }
-
-    Ok(())
+    return Ok(rkyv::to_bytes::<rkyv::rancor::Error>(&all_connections)?);
 }

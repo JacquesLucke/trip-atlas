@@ -8,6 +8,7 @@ use std::{
 use ustr::{ustr, Ustr};
 
 mod export_station_locations;
+mod find_optimal_paths;
 mod gtfs_rkyv;
 mod prepare_direct_connections_rkyv;
 mod prepare_gtfs_as_rkyv;
@@ -26,15 +27,15 @@ enum CLICommand {
         #[arg(long)]
         gtfs_path: String,
     },
-    PrepareDirectConnections {
-        #[arg(long)]
-        gtfs_path: String,
-    },
     ExportStationLocations {
         #[arg(long)]
         gtfs_path: String,
         #[arg(long)]
         output_path: String,
+    },
+    FindOptimalPaths {
+        #[arg(long)]
+        gtfs_path: String,
     },
 }
 
@@ -366,10 +367,6 @@ async fn main() -> Result<()> {
         CLICommand::PrepareGTFS { gtfs_path } => {
             prepare_gtfs_as_rkyv::ensure_gtfs_folder_rkyv(Path::new(&gtfs_path)).await?;
         }
-        CLICommand::PrepareDirectConnections { gtfs_path } => {
-            prepare_direct_connections_rkyv::prepare_direct_connections(Path::new(&gtfs_path))
-                .await?;
-        }
         CLICommand::ExportStationLocations {
             gtfs_path,
             output_path,
@@ -379,6 +376,9 @@ async fn main() -> Result<()> {
                 Path::new(&output_path),
             )
             .await?;
+        }
+        CLICommand::FindOptimalPaths { gtfs_path } => {
+            find_optimal_paths::find_optimal_paths(Path::new(&gtfs_path)).await?;
         }
     }
     Ok(())
