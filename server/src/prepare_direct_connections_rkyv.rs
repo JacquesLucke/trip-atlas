@@ -1,4 +1,7 @@
-use crate::gtfs_rkyv::{self, *};
+use crate::{
+    gtfs_rkyv::{self, *},
+    memory_mapped_rkyv::{self, MemoryMappedRkyv},
+};
 use anyhow::Result;
 use indicatif::ProgressIterator;
 use std::{
@@ -28,25 +31,15 @@ pub struct ConnectionToStop {
     pub duration: u32,
 }
 
-pub struct AllConnectionsRkyv<'a> {
-    pub _mmap: memmap2::Mmap,
-    // This references data owned by the mmap.
-    pub data: &'a ArchivedAllConnections,
-}
-
 const DIRECT_CONNECTIONS_FILE_NAME: &str = "all_connections.bin";
 
-pub async fn load_direct_connections_rkyv(gtfs_folder_path: &Path) -> Result<AllConnectionsRkyv> {
+pub async fn load_direct_connections_rkyv(
+    gtfs_folder_path: &Path,
+) -> Result<MemoryMappedRkyv<'_, ArchivedAllConnections>> {
     let rkyv_path = ensure_direct_connections_rkyv(gtfs_folder_path).await?;
-    let file = std::fs::File::open(&rkyv_path)?;
-    // Safety: This is safe for as long as the underlying file is not modified.
-    let mmap = unsafe { memmap2::Mmap::map(&file)? };
-    let buffer: &[u8] = unsafe { std::slice::from_raw_parts(mmap.as_ptr(), mmap.len()) };
-    let rkyv_data = unsafe { rkyv::access_unchecked::<ArchivedAllConnections>(buffer) };
-    Ok(AllConnectionsRkyv {
-        _mmap: mmap,
-        data: rkyv_data,
-    })
+    unsafe {
+        memory_mapped_rkyv::load_memory_mapped_rkyv::<ArchivedAllConnections>(&rkyv_path).await
+    }
 }
 
 pub async fn ensure_direct_connections_rkyv(gtfs_folder_path: &Path) -> Result<PathBuf> {
@@ -72,7 +65,6 @@ pub async fn get_direct_connections_rkyv_buffer(
 
     let mut index_by_stop_id = HashMap::new();
     for (i, stop) in src_data
-        .rkyv_data
         .stops
         .iter()
         .enumerate()
@@ -87,7 +79,6 @@ pub async fn get_direct_connections_rkyv_buffer(
     let mut stops_by_trip = HashMap::new();
 
     for stop_time in src_data
-        .rkyv_data
         .stop_times
         .iter()
         .progress_with_style(style.clone())
@@ -137,7 +128,7 @@ pub async fn get_direct_connections_rkyv_buffer(
             ConnectionsFromStop {
                 connections: vec![],
             };
-            src_data.rkyv_data.stops.len()
+            src_data.stops.len()
         ],
     };
 

@@ -20,7 +20,7 @@ pub async fn export_station_locations(gtfs_folder_path: &Path, output_path: &Pat
 
     let mut result = StationLocations { stations: vec![] };
 
-    for stop in gtfs_rkyv.rkyv_data.stops.iter() {
+    for stop in gtfs_rkyv.stops.iter() {
         if let Some(name) = stop.name.as_ref() {
             if name.contains("Hennigsdorf") && stop.parent_station_id.is_none() {
                 result.stations.push(StationInfo {

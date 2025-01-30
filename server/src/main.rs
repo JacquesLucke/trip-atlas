@@ -10,6 +10,7 @@ use ustr::{ustr, Ustr};
 mod export_station_locations;
 mod find_optimal_paths;
 mod gtfs_rkyv;
+mod memory_mapped_rkyv;
 mod prepare_direct_connections_rkyv;
 mod prepare_gtfs_as_rkyv;
 

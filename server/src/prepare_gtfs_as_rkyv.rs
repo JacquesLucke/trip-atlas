@@ -3,29 +3,21 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::gtfs_rkyv::{self, *};
+use crate::{
+    gtfs_rkyv::{self, *},
+    memory_mapped_rkyv::{self, MemoryMappedRkyv},
+};
 use anyhow::Result;
 
 const RKYV_FILE_NAME: &str = "data_rkyv.bin";
 
-pub struct GtfsRkyv<'a> {
-    pub _mmap: memmap2::Mmap,
-    // This references data owned by the mmap.
-    pub rkyv_data: &'a gtfs_rkyv::ArchivedGtfsData,
-}
-
-pub async fn load_gtfs_folder_rkyv(gtfs_folder_path: &Path) -> Result<GtfsRkyv> {
+pub async fn load_gtfs_folder_rkyv(
+    gtfs_folder_path: &Path,
+) -> Result<MemoryMappedRkyv<'_, gtfs_rkyv::ArchivedGtfsData>> {
     let rkyv_path = ensure_gtfs_folder_rkyv(gtfs_folder_path).await?;
-    let file = std::fs::File::open(&rkyv_path)?;
-    // Safety: This is safe for as long as the underlying file is not modified.
-    let mmap = unsafe { memmap2::Mmap::map(&file)? };
-    let buffer: &[u8] = unsafe { std::slice::from_raw_parts(mmap.as_ptr(), mmap.len()) };
-    // let rkyv_data = rkyv::access::<gtfs_rkyv::ArchivedGtfsData, rkyv::rancor::Error>(buffer)?;
-    let rkyv_data = unsafe { rkyv::access_unchecked::<gtfs_rkyv::ArchivedGtfsData>(buffer) };
-    Ok(GtfsRkyv {
-        _mmap: mmap,
-        rkyv_data,
-    })
+    unsafe {
+        memory_mapped_rkyv::load_memory_mapped_rkyv::<gtfs_rkyv::ArchivedGtfsData>(&rkyv_path).await
+    }
 }
 
 pub async fn ensure_gtfs_folder_rkyv(gtfs_folder_path: &Path) -> Result<PathBuf> {

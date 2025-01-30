@@ -9,10 +9,10 @@ pub async fn find_optimal_paths(gtfs_folder_path: &Path) -> Result<()> {
     let all_connections_rkyv =
         prepare_direct_connections_rkyv::load_direct_connections_rkyv(gtfs_folder_path).await?;
 
-    for (i, stop) in all_connections_rkyv.data.stops.iter().enumerate() {
+    for (i, stop) in all_connections_rkyv.stops.iter().enumerate() {
         println!(
             "{:?}: {:?}",
-            gtfs_rkyv.rkyv_data.stops[i].name,
+            gtfs_rkyv.stops[i].name,
             stop.connections.len()
         );
     }
