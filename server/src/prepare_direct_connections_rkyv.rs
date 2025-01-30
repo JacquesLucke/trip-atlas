@@ -1,7 +1,4 @@
-use crate::{
-    gtfs_rkyv::{self, *},
-    memory_mapped_rkyv::{self, MemoryMappedRkyv},
-};
+use crate::memory_mapped_rkyv::{self, MemoryMappedRkyv};
 use anyhow::Result;
 use indicatif::ProgressIterator;
 use std::{
@@ -15,18 +12,19 @@ use crate::prepare_gtfs_as_rkyv;
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
 #[rkyv(derive(Debug))]
 pub struct AllConnections {
-    pub stops: Vec<ConnectionsFromStop>,
+    pub stations: Vec<ConnectionsFromStation>,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone)]
 #[rkyv(derive(Debug))]
-pub struct ConnectionsFromStop {
-    pub connections: Vec<ConnectionToStop>,
+pub struct ConnectionsFromStation {
+    pub main_stop_i: u32,
+    pub connections: Vec<ConnectionToStation>,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Copy, Clone)]
 #[rkyv(derive(Debug))]
-pub struct ConnectionToStop {
+pub struct ConnectionToStation {
     pub to_station_i: u32,
     pub duration: u32,
 }
@@ -63,17 +61,41 @@ pub async fn get_direct_connections_rkyv_buffer(
 
     let src_data = prepare_gtfs_as_rkyv::load_gtfs_folder_rkyv(gtfs_folder_path).await?;
 
-    let mut index_by_stop_id = HashMap::new();
-    for (i, stop) in src_data
+    let mut connections_by_stations = vec![];
+
+    let mut station_index_by_stop_id = HashMap::new();
+    for (stop_i, stop) in src_data
         .stops
         .iter()
-        .enumerate()
         .into_iter()
+        .enumerate()
         .progress_with_style(style.clone())
-        .with_message("Remember index by stop id.")
+        .with_message("Order unique stations.")
         .with_finish(indicatif::ProgressFinish::AndLeave)
     {
-        index_by_stop_id.insert(stop.id.as_str(), i as u32);
+        if stop.parent_station_id.is_none() {
+            let station_i = station_index_by_stop_id.len() as u32;
+            connections_by_stations.push(ConnectionsFromStation {
+                main_stop_i: stop_i as u32,
+                connections: vec![],
+            });
+            station_index_by_stop_id.insert(stop.id.as_str(), station_i);
+        }
+    }
+
+    for stop in src_data
+        .stops
+        .iter()
+        .into_iter()
+        .progress_with_style(style.clone())
+        .with_message("Map stops to stations.")
+        .with_finish(indicatif::ProgressFinish::AndLeave)
+    {
+        if let Some(parent_station_id) = stop.parent_station_id.as_ref() {
+            if let Some(station_i) = station_index_by_stop_id.get(parent_station_id.as_str()) {
+                station_index_by_stop_id.insert(&stop.id.as_str(), *station_i);
+            }
+        }
     }
 
     let mut stops_by_trip = HashMap::new();
@@ -103,9 +125,9 @@ pub async fn get_direct_connections_rkyv_buffer(
         stops_in_trip.sort_by_key(|stop_time| stop_time.stop_sequence);
 
         for connection in stops_in_trip.windows(2) {
-            if let (Some(from_stop_i), Some(to_stop_i)) = (
-                index_by_stop_id.get(connection[0].stop_id.as_str()),
-                index_by_stop_id.get(connection[1].stop_id.as_str()),
+            if let (Some(from_station_i), Some(to_station_i)) = (
+                station_index_by_stop_id.get(connection[0].stop_id.as_str()),
+                station_index_by_stop_id.get(connection[1].stop_id.as_str()),
             ) {
                 if let (Some(deparature_time), Some(arrival_time)) = (
                     connection[0].departure_time.as_ref(),
@@ -113,7 +135,7 @@ pub async fn get_direct_connections_rkyv_buffer(
                 ) {
                     let duration = arrival_time - deparature_time;
                     let entry = shortest_durations
-                        .entry((*from_stop_i, *to_stop_i))
+                        .entry((*from_station_i, *to_station_i))
                         .or_insert(duration);
                     if *entry > duration {
                         *entry = duration;
@@ -123,28 +145,21 @@ pub async fn get_direct_connections_rkyv_buffer(
         }
     }
 
-    let mut all_connections = AllConnections {
-        stops: vec![
-            ConnectionsFromStop {
-                connections: vec![],
-            };
-            src_data.stops.len()
-        ],
-    };
-
     for ((from_station_i, to_station_i), duration) in shortest_durations
         .iter()
         .progress_with_style(style.clone())
         .with_message("Create connections.")
         .with_finish(indicatif::ProgressFinish::AndLeave)
     {
-        all_connections.stops[*from_station_i as usize]
+        connections_by_stations[*from_station_i as usize]
             .connections
-            .push(ConnectionToStop {
+            .push(ConnectionToStation {
                 to_station_i: *to_station_i,
                 duration: *duration,
             });
     }
 
-    return Ok(rkyv::to_bytes::<rkyv::rancor::Error>(&all_connections)?);
+    return Ok(rkyv::to_bytes::<rkyv::rancor::Error>(&AllConnections {
+        stations: connections_by_stations,
+    })?);
 }
