@@ -4,32 +4,6 @@ use anyhow::Result;
 
 use crate::{prepare_direct_connections_rkyv, prepare_gtfs_as_rkyv};
 
-#[derive(Debug, Clone, Copy)]
-struct TimeWithStation {
-    time: u32,
-    station_i: u32,
-}
-
-impl PartialEq for TimeWithStation {
-    fn eq(&self, other: &Self) -> bool {
-        self.time == other.time
-    }
-}
-
-impl PartialOrd for TimeWithStation {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.time.cmp(&other.time))
-    }
-}
-
-impl Eq for TimeWithStation {}
-
-impl Ord for TimeWithStation {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.time.cmp(&other.time)
-    }
-}
-
 #[derive(Debug, Clone)]
 struct StationState {
     earliest_arrival: Option<u32>,
@@ -53,8 +27,6 @@ pub async fn find_optimal_paths(gtfs_folder_path: &Path) -> Result<()> {
     let all_connections_rkyv =
         prepare_direct_connections_rkyv::load_direct_connections_rkyv(gtfs_folder_path).await?;
 
-    let start_instant = std::time::Instant::now();
-
     let mut start_station_indices = vec![];
 
     for (i, station) in all_connections_rkyv.stations.iter().enumerate() {
@@ -72,7 +44,15 @@ pub async fn find_optimal_paths(gtfs_folder_path: &Path) -> Result<()> {
         };
         all_connections_rkyv.stations.len()
     ];
-    find_optimal_paths_with_binary_heap(
+
+    let start_instant = std::time::Instant::now();
+
+    // _find_optimal_paths_with_binary_heap(
+    //     &all_connections_rkyv,
+    //     &start_station_indices,
+    //     &mut station_states,
+    // );
+    find_optimal_paths_with_time_buckets(
         &all_connections_rkyv,
         &start_station_indices,
         &mut station_states,
@@ -124,11 +104,37 @@ pub async fn find_optimal_paths(gtfs_folder_path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn find_optimal_paths_with_binary_heap(
+fn _find_optimal_paths_with_binary_heap(
     all_connections_rkyv: &prepare_direct_connections_rkyv::ArchivedAllConnections,
     start_station_indices: &[u32],
     station_states: &mut [StationState],
 ) {
+    #[derive(Debug, Clone, Copy)]
+    struct TimeWithStation {
+        time: u32,
+        station_i: u32,
+    }
+
+    impl PartialEq for TimeWithStation {
+        fn eq(&self, other: &Self) -> bool {
+            self.time == other.time
+        }
+    }
+
+    impl PartialOrd for TimeWithStation {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            Some(self.time.cmp(&other.time))
+        }
+    }
+
+    impl Eq for TimeWithStation {}
+
+    impl Ord for TimeWithStation {
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            self.time.cmp(&other.time)
+        }
+    }
+
     let mut queue = BinaryHeap::new();
 
     for start_station_i in start_station_indices {
@@ -157,6 +163,73 @@ fn find_optimal_paths_with_binary_heap(
                 time: next_station_time,
                 station_i: next_station_i,
             }));
+        }
+    }
+}
+
+fn find_optimal_paths_with_time_buckets(
+    all_connections_rkyv: &prepare_direct_connections_rkyv::ArchivedAllConnections,
+    start_station_indices: &[u32],
+    station_states: &mut [StationState],
+) {
+    #[derive(Debug, Clone)]
+    struct Bucket {
+        station_indices: Vec<u32>,
+    }
+
+    let max_seconds = 3000 * 60;
+    let seconds_per_bucket = 30;
+    let buckets_num = max_seconds / seconds_per_bucket + 1;
+
+    let mut buckets = vec![
+        Bucket {
+            station_indices: vec![]
+        };
+        buckets_num
+    ];
+
+    let first_bucket = &mut buckets[0];
+    first_bucket
+        .station_indices
+        .extend_from_slice(start_station_indices);
+
+    for station_i in start_station_indices {
+        let station_state = &mut station_states[*station_i as usize];
+        station_state.earliest_arrival = Some(0);
+    }
+
+    for bucket_i in 0..buckets_num {
+        let current_time = bucket_i * seconds_per_bucket;
+        let (before_buckets, after_buckets) = buckets.split_at_mut(bucket_i + 1);
+
+        let bucket = &mut before_buckets[bucket_i];
+        while !bucket.station_indices.is_empty() {
+            let mut new_station_indices = vec![];
+            for station_i in bucket.station_indices.iter() {
+                let station = &all_connections_rkyv.stations[*station_i as usize];
+                for connection in station.connections.iter() {
+                    let connection_duration = connection.duration.to_native() as usize;
+                    let next_station_i = connection.to_station_i.to_native();
+                    let next_station_state = &mut station_states[next_station_i as usize];
+                    let next_station_time = current_time + connection_duration;
+                    if let Some(next_station_earliest_arrival) = next_station_state.earliest_arrival
+                    {
+                        if next_station_time >= next_station_earliest_arrival as usize {
+                            // Connection arrives at a later point than already found.
+                            continue;
+                        }
+                    }
+                    next_station_state.earliest_arrival = Some(next_station_time as u32);
+                    let next_bucket_i = next_station_time / seconds_per_bucket;
+                    if next_bucket_i == bucket_i {
+                        new_station_indices.push(next_station_i);
+                    } else {
+                        let next_bucket = &mut after_buckets[next_bucket_i - bucket_i - 1];
+                        next_bucket.station_indices.push(next_station_i);
+                    }
+                }
+            }
+            bucket.station_indices = new_station_indices;
         }
     }
 }

@@ -9,7 +9,11 @@
       "type": "cppdbg",
       "request": "launch",
       "program": "${workspaceFolder}/server/target/debug/trip-atlas-server",
-      "args": [],
+      "args": [
+        "find-optimal-paths",
+        "--gtfs-path",
+        "/home/jacques/Documents/germany_gtfs"
+      ],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}/server",
       "environment": [],
