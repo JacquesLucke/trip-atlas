@@ -44,8 +44,9 @@ async function main() {
   const map = L.map(mapContainer, {
     // Fractional zoom has visible lines between the tiles currently.
     // https://github.com/Leaflet/Leaflet/issues/3575
-    zoomSnap: 0,
+    zoomSnap: 1,
     // zoomDelta: 1,
+    zoomAnimation: false,
   }).setView(
     new L.LatLng(
       savedMapView.latitude ?? defaultCoordinates.lat,
@@ -245,6 +246,23 @@ async function addOverlayCanvas(map: L.Map, locations: SourceJson) {
       gl.getUniformLocation(program, "resolution"),
       mapSize.x,
       mapSize.y
+    );
+
+    const sizeByZoom = new Map<number, number>();
+    sizeByZoom.set(18, 20.0);
+    sizeByZoom.set(17, 19.0);
+    sizeByZoom.set(16, 17.0);
+    sizeByZoom.set(15, 15.0);
+    sizeByZoom.set(14, 12.0);
+    sizeByZoom.set(13, 10.0);
+    sizeByZoom.set(12, 8.0);
+    sizeByZoom.set(11, 6.0);
+    sizeByZoom.set(10, 4.0);
+    sizeByZoom.set(9, 3.0);
+    sizeByZoom.set(8, 3.0);
+    gl.uniform1f(
+      gl.getUniformLocation(program, "stationSize"),
+      sizeByZoom.get(Math.round(map.getZoom())) ?? 2.0
     );
 
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, locations.stations.length);
