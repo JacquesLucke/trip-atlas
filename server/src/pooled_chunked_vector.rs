@@ -7,6 +7,7 @@ pub struct ChunkedVectorPool<T: Copy> {
     bump: bumpalo::Bump,
 }
 
+/// A chunked vector that can takes its memory from a pool that can be shared between many vectors.
 pub struct ChunkedVector<T: Copy> {
     data: Option<NonNull<Chunk<T>>>,
 }
