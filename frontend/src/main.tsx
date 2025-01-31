@@ -169,17 +169,18 @@ async function addOverlayCanvas(map: L.Map, locations: SourceJson) {
     "map-container-overlay"
   )! as HTMLCanvasElement;
 
-  const gl = canvas.getContext("webgl")!;
+  const gl = canvas.getContext("webgl2")!;
 
   const program = createShaderProgram(gl, vertexShaderSrc, fragmentShaderSrc)!;
-  const programInfo = {
-    program: program,
-    attribLocations: {
-      locations: gl.getAttribLocation(program, "aVertexPosition"),
-      times: gl.getAttribLocation(program, "aVertexTime"),
-    },
-    uniformLocations: {},
+  const attrs = {
+    quadOffset: gl.getAttribLocation(program, "quadOffsetAttr"),
+    locations: gl.getAttribLocation(program, "locationAttr"),
+    times: gl.getAttribLocation(program, "timeAttr"),
   };
+
+  const quadOffsets = new Float32Array([
+    -0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, -0.5, 0.5, 0.5, -0.5, 0.5,
+  ]);
 
   const positions = new Float32Array(locations.stations.length * 2);
   const times = new Float32Array(locations.stations.length);
@@ -190,13 +191,17 @@ async function addOverlayCanvas(map: L.Map, locations: SourceJson) {
     times[i] = station.time ?? Number.MAX_VALUE;
   }
 
-  const positionsBuffer = gl.createBuffer()!;
-  gl.bindBuffer(gl.ARRAY_BUFFER, positionsBuffer);
+  const locationsAttrBuffer = gl.createBuffer()!;
+  gl.bindBuffer(gl.ARRAY_BUFFER, locationsAttrBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
 
-  const timesBuffer = gl.createBuffer()!;
-  gl.bindBuffer(gl.ARRAY_BUFFER, timesBuffer);
+  const timesAttrBuffer = gl.createBuffer()!;
+  gl.bindBuffer(gl.ARRAY_BUFFER, timesAttrBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, times, gl.STATIC_DRAW);
+
+  const quadOffsetAttrBuffer = gl.createBuffer()!;
+  gl.bindBuffer(gl.ARRAY_BUFFER, quadOffsetAttrBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, quadOffsets, gl.STATIC_DRAW);
 
   function render() {
     const mapSize = map.getSize();
@@ -209,28 +214,22 @@ async function addOverlayCanvas(map: L.Map, locations: SourceJson) {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.viewport(0, 0, mapSize.x, mapSize.y);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionsBuffer);
-    gl.vertexAttribPointer(
-      programInfo.attribLocations.locations,
-      2,
-      gl.FLOAT,
-      false,
-      0,
-      0
-    );
-    gl.enableVertexAttribArray(programInfo.attribLocations.locations);
-    gl.bindBuffer(gl.ARRAY_BUFFER, timesBuffer);
-    gl.vertexAttribPointer(
-      programInfo.attribLocations.times,
-      1,
-      gl.FLOAT,
-      false,
-      0,
-      0
-    );
-    gl.enableVertexAttribArray(programInfo.attribLocations.times);
-
     gl.useProgram(program);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, locationsAttrBuffer);
+    gl.vertexAttribPointer(attrs.locations, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(attrs.locations);
+    gl.vertexAttribDivisor(attrs.locations, 1);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, timesAttrBuffer);
+    gl.vertexAttribPointer(attrs.times, 1, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(attrs.times);
+    gl.vertexAttribDivisor(attrs.times, 1);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadOffsetAttrBuffer);
+    gl.vertexAttribPointer(attrs.quadOffset, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(attrs.quadOffset);
+    // gl.vertexAttribDivisor(attrs.quadOffset, 2);
 
     gl.uniform2f(
       gl.getUniformLocation(program, "mapCenter"),
@@ -242,8 +241,13 @@ async function addOverlayCanvas(map: L.Map, locations: SourceJson) {
       mapBounds.getEast() - mapBounds.getWest(),
       mapBounds.getNorth() - mapBounds.getSouth()
     );
+    gl.uniform2f(
+      gl.getUniformLocation(program, "resolution"),
+      mapSize.x,
+      mapSize.y
+    );
 
-    gl.drawArrays(gl.POINTS, 0, positions.length / 2);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, locations.stations.length);
   }
 
   render();
