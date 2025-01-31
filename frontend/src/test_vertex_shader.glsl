@@ -10,13 +10,15 @@ uniform vec2 resolution;
 uniform float stationSize;
 
 varying float v_time;
+varying vec2 v_quad;
 
 void main() {
 
   float aspect = resolution.x / resolution.y;
   gl_Position = vec4((locationAttr - mapCenter) / mapExtent * 2.0 +
                          quadOffsetAttr * vec2(1.0, aspect) *
-                             (stationSize / resolution.x * 2.0),
+                             (stationSize / resolution.x),
                      0.0, 1.0);
   v_time = timeAttr;
+  v_quad = quadOffsetAttr;
 }

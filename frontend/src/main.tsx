@@ -180,7 +180,7 @@ async function addOverlayCanvas(map: L.Map, locations: SourceJson) {
   };
 
   const quadOffsets = new Float32Array([
-    -0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, -0.5, 0.5, 0.5, -0.5, 0.5,
+    -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0,
   ]);
 
   const positions = new Float32Array(locations.stations.length * 2);
@@ -208,6 +208,7 @@ async function addOverlayCanvas(map: L.Map, locations: SourceJson) {
     const mapSize = map.getSize();
     const mapCenter = map.getCenter();
     const mapBounds = map.getBounds();
+    const mapZoom = map.getZoom();
     canvas.width = mapSize.x;
     canvas.height = mapSize.y;
 
@@ -230,7 +231,6 @@ async function addOverlayCanvas(map: L.Map, locations: SourceJson) {
     gl.bindBuffer(gl.ARRAY_BUFFER, quadOffsetAttrBuffer);
     gl.vertexAttribPointer(attrs.quadOffset, 2, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(attrs.quadOffset);
-    // gl.vertexAttribDivisor(attrs.quadOffset, 2);
 
     gl.uniform2f(
       gl.getUniformLocation(program, "mapCenter"),
@@ -247,6 +247,10 @@ async function addOverlayCanvas(map: L.Map, locations: SourceJson) {
       mapSize.x,
       mapSize.y
     );
+    gl.uniform1f(
+      gl.getUniformLocation(program, "borderThickness"),
+      mapZoom >= 12 ? 0.2 : 0.0
+    );
 
     const sizeByZoom = new Map<number, number>();
     sizeByZoom.set(18, 20.0);
@@ -262,7 +266,7 @@ async function addOverlayCanvas(map: L.Map, locations: SourceJson) {
     sizeByZoom.set(8, 3.0);
     gl.uniform1f(
       gl.getUniformLocation(program, "stationSize"),
-      sizeByZoom.get(Math.round(map.getZoom())) ?? 2.0
+      sizeByZoom.get(Math.round(mapZoom)) ?? 2.0
     );
 
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, locations.stations.length);
