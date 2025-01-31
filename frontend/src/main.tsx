@@ -7,7 +7,7 @@ import "leaflet/dist/leaflet.css";
 import staticLocations from "./stations_test_data.json";
 import RBush from "rbush";
 
-const useStaticLocations = true;
+const useStaticLocations = false;
 const locationsUrl =
   "https://trip-atlas.fsn1.your-objectstorage.com/test-data/stations_test_data.json";
 
@@ -44,7 +44,7 @@ async function main() {
   const map = L.map(mapContainer, {
     // Fractional zoom has visible lines between the tiles currently.
     // https://github.com/Leaflet/Leaflet/issues/3575
-    zoomSnap: 1,
+    zoomSnap: 0,
     // zoomDelta: 1,
     zoomAnimation: false,
   }).setView(

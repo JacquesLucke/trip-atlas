@@ -14,7 +14,7 @@ void main() {
   if (distToCenter > 1.0 - borderThickness) {
     gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
   } else {
-    float time_factor = v_time / 10000.0;
+    float time_factor = v_time / 5000.0;
     gl_FragColor = vec4(time_factor, 1.0 - time_factor, 0.5 - time_factor, 1.0);
   }
 }
