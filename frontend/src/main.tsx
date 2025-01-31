@@ -44,7 +44,7 @@ async function main() {
   const map = L.map(mapContainer, {
     // Fractional zoom has visible lines between the tiles currently.
     // https://github.com/Leaflet/Leaflet/issues/3575
-    // zoomSnap: 0,
+    zoomSnap: 0,
     // zoomDelta: 1,
   }).setView(
     new L.LatLng(
@@ -112,40 +112,40 @@ async function main() {
 
       const paddedBounds = bounds.pad(0.3);
 
-      const foundStations = stationsTree.search({
-        minX: paddedBounds.getWest(),
-        minY: paddedBounds.getSouth(),
-        maxX: paddedBounds.getEast(),
-        maxY: paddedBounds.getNorth(),
-      });
+      // const foundStations = stationsTree.search({
+      //   minX: paddedBounds.getWest(),
+      //   minY: paddedBounds.getSouth(),
+      //   maxX: paddedBounds.getEast(),
+      //   maxY: paddedBounds.getNorth(),
+      // });
 
-      for (const station of foundStations) {
-        const pixelPos = map
-          .project(new L.LatLng(station.latitude, station.longitude), coords.z)
-          .subtract(coords.scaleBy(tileSize));
-        if (
-          pixelPos.x < -circleRadius ||
-          pixelPos.x > tileSize.x + circleRadius ||
-          pixelPos.y < -circleRadius ||
-          pixelPos.y > tileSize.y + circleRadius
-        ) {
-          continue;
-        }
+      // for (const station of foundStations) {
+      //   const pixelPos = map
+      //     .project(new L.LatLng(station.latitude, station.longitude), coords.z)
+      //     .subtract(coords.scaleBy(tileSize));
+      //   if (
+      //     pixelPos.x < -circleRadius ||
+      //     pixelPos.x > tileSize.x + circleRadius ||
+      //     pixelPos.y < -circleRadius ||
+      //     pixelPos.y > tileSize.y + circleRadius
+      //   ) {
+      //     continue;
+      //   }
 
-        const time = station.time ?? Number.MAX_VALUE;
+      //   const time = station.time ?? Number.MAX_VALUE;
 
-        const circle = document.createElementNS(svgNS, "circle");
-        circle.setAttribute("cx", `${pixelPos.x}`);
-        circle.setAttribute("cy", `${pixelPos.y}`);
-        circle.setAttribute("r", `${circleRadius}px`);
-        circle.setAttribute(
-          "fill",
-          `hsl(${Math.min(1, time / 10000)}turn, 100%, 50%)`
-        );
-        circle.setAttribute("opacity", `1.0`);
+      //   const circle = document.createElementNS(svgNS, "circle");
+      //   circle.setAttribute("cx", `${pixelPos.x}`);
+      //   circle.setAttribute("cy", `${pixelPos.y}`);
+      //   circle.setAttribute("r", `${circleRadius}px`);
+      //   circle.setAttribute(
+      //     "fill",
+      //     `hsl(${Math.min(1, time / 10000)}turn, 100%, 50%)`
+      //   );
+      //   circle.setAttribute("opacity", `1.0`);
 
-        svg.appendChild(circle);
-      }
+      //   svg.appendChild(circle);
+      // }
 
       tile.appendChild(svg);
       activeTiles.set(tile, {});
@@ -158,13 +158,13 @@ async function main() {
   });
   customLayer.addTo(map);
 
-  await addOverlayCanvas(map);
+  await addOverlayCanvas(map, locations);
 }
 
 import vertexShaderSrc from "./test_vertex_shader.glsl";
 import fragmentShaderSrc from "./test_fragment_shader.glsl";
 
-async function addOverlayCanvas(map: L.Map) {
+async function addOverlayCanvas(map: L.Map, locations: SourceJson) {
   const canvas = document.getElementById(
     "map-container-overlay"
   )! as HTMLCanvasElement;
@@ -175,15 +175,28 @@ async function addOverlayCanvas(map: L.Map) {
   const programInfo = {
     program: program,
     attribLocations: {
-      vertexPositions: gl.getAttribLocation(program, "aVertexPosition"),
+      locations: gl.getAttribLocation(program, "aVertexPosition"),
+      times: gl.getAttribLocation(program, "aVertexTime"),
     },
     uniformLocations: {},
   };
 
+  const positions = new Float32Array(locations.stations.length * 2);
+  const times = new Float32Array(locations.stations.length);
+  for (let i = 0; i < locations.stations.length; i++) {
+    const station = locations.stations[i];
+    positions[i * 2] = station.longitude;
+    positions[i * 2 + 1] = station.latitude;
+    times[i] = station.time ?? Number.MAX_VALUE;
+  }
+
   const positionsBuffer = gl.createBuffer()!;
   gl.bindBuffer(gl.ARRAY_BUFFER, positionsBuffer);
-  const positions = new Float32Array([13.203611, 52.637778]);
   gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+
+  const timesBuffer = gl.createBuffer()!;
+  gl.bindBuffer(gl.ARRAY_BUFFER, timesBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, times, gl.STATIC_DRAW);
 
   function render() {
     const mapSize = map.getSize();
@@ -192,20 +205,30 @@ async function addOverlayCanvas(map: L.Map) {
     canvas.width = mapSize.x;
     canvas.height = mapSize.y;
 
-    gl.clearColor(0, 0, 0, 0.4);
+    gl.clearColor(0, 0, 0, 0.0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.viewport(0, 0, mapSize.x, mapSize.y);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, positionsBuffer);
     gl.vertexAttribPointer(
-      programInfo.attribLocations.vertexPositions,
+      programInfo.attribLocations.locations,
       2,
       gl.FLOAT,
       false,
       0,
       0
     );
-    gl.enableVertexAttribArray(programInfo.attribLocations.vertexPositions);
+    gl.enableVertexAttribArray(programInfo.attribLocations.locations);
+    gl.bindBuffer(gl.ARRAY_BUFFER, timesBuffer);
+    gl.vertexAttribPointer(
+      programInfo.attribLocations.times,
+      1,
+      gl.FLOAT,
+      false,
+      0,
+      0
+    );
+    gl.enableVertexAttribArray(programInfo.attribLocations.times);
 
     gl.useProgram(program);
 
