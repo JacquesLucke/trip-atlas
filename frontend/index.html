@@ -10,6 +10,17 @@
       id="map-container"
       style="height: 100vh; width: 100%; z-index: 0"
     ></div>
+    <canvas
+      id="map-container-overlay"
+      style="
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        width: 100%;
+        pointer-events: none;
+      "
+    ></canvas>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

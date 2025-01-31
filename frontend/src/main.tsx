@@ -7,7 +7,7 @@ import "leaflet/dist/leaflet.css";
 import staticLocations from "./stations_test_data.json";
 import RBush from "rbush";
 
-const useStaticLocations = false;
+const useStaticLocations = true;
 const locationsUrl =
   "https://trip-atlas.fsn1.your-objectstorage.com/test-data/stations_test_data.json";
 
@@ -36,12 +36,12 @@ async function main() {
   );
 
   // Initialize map.
-  const mapContainerId = "map-container";
+  const mapContainer = document.getElementById("map-container")!;
   const defaultCoordinates = new L.LatLng(52.637778, 13.203611);
   const defaultZoom = 14;
   const savedMapView = JSON.parse(localStorage.getItem("map-view") ?? "{}");
 
-  const map = L.map(mapContainerId, {
+  const map = L.map(mapContainer, {
     // Fractional zoom has visible lines between the tiles currently.
     // https://github.com/Leaflet/Leaflet/issues/3575
     // zoomSnap: 0,
@@ -140,7 +140,7 @@ async function main() {
         circle.setAttribute("r", `${circleRadius}px`);
         circle.setAttribute(
           "fill",
-          `hsl(${Math.min(1, time / 3000)}turn, 100%, 50%)`
+          `hsl(${Math.min(1, time / 10000)}turn, 100%, 50%)`
         );
         circle.setAttribute("opacity", `1.0`);
 
@@ -157,6 +157,114 @@ async function main() {
     activeTiles.delete(event.tile);
   });
   customLayer.addTo(map);
+
+  await addOverlayCanvas(map);
+}
+
+import vertexShaderSrc from "./test_vertex_shader.glsl";
+import fragmentShaderSrc from "./test_fragment_shader.glsl";
+
+async function addOverlayCanvas(map: L.Map) {
+  const canvas = document.getElementById(
+    "map-container-overlay"
+  )! as HTMLCanvasElement;
+
+  const gl = canvas.getContext("webgl")!;
+
+  const program = createShaderProgram(gl, vertexShaderSrc, fragmentShaderSrc)!;
+  const programInfo = {
+    program: program,
+    attribLocations: {
+      vertexPositions: gl.getAttribLocation(program, "aVertexPosition"),
+    },
+    uniformLocations: {},
+  };
+
+  const positionsBuffer = gl.createBuffer()!;
+  gl.bindBuffer(gl.ARRAY_BUFFER, positionsBuffer);
+  const positions = new Float32Array([13.203611, 52.637778]);
+  gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+
+  function render() {
+    const mapSize = map.getSize();
+    const mapCenter = map.getCenter();
+    const mapBounds = map.getBounds();
+    canvas.width = mapSize.x;
+    canvas.height = mapSize.y;
+
+    gl.clearColor(0, 0, 0, 0.4);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.viewport(0, 0, mapSize.x, mapSize.y);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionsBuffer);
+    gl.vertexAttribPointer(
+      programInfo.attribLocations.vertexPositions,
+      2,
+      gl.FLOAT,
+      false,
+      0,
+      0
+    );
+    gl.enableVertexAttribArray(programInfo.attribLocations.vertexPositions);
+
+    gl.useProgram(program);
+
+    gl.uniform2f(
+      gl.getUniformLocation(program, "mapCenter"),
+      mapCenter.lng,
+      mapCenter.lat
+    );
+    gl.uniform2f(
+      gl.getUniformLocation(program, "mapExtent"),
+      mapBounds.getEast() - mapBounds.getWest(),
+      mapBounds.getNorth() - mapBounds.getSouth()
+    );
+
+    gl.drawArrays(gl.POINTS, 0, positions.length / 2);
+  }
+
+  render();
+
+  map.on("move", render);
+  map.on("zoomlevelschange", render);
+  map.on("zoomanim", render);
+  map.on("drag", render);
+}
+
+function createShaderProgram(
+  gl: WebGLRenderingContext,
+  vertexShaderSrc: string,
+  fragmentShaderSrc: string
+) {
+  const vertexShader = loadShader(gl, gl.VERTEX_SHADER, vertexShaderSrc);
+  const fragmentShader = loadShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSrc);
+
+  const program = gl.createProgram()!;
+  gl.attachShader(program, vertexShader!);
+  gl.attachShader(program, fragmentShader!);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error(gl.getProgramInfoLog(program));
+    return null;
+  }
+  return program;
+}
+
+function loadShader(gl: WebGLRenderingContext, type: GLenum, source: string) {
+  const shader = gl.createShader(type);
+  if (!shader) {
+    return null;
+  }
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  const success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+  if (success) {
+    return shader;
+  }
+  console.error(gl.getShaderInfoLog(shader));
+  gl.deleteShader(shader);
+  return null;
 }
 
 main();
